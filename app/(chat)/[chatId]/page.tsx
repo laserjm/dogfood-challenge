@@ -2,7 +2,6 @@ import { deleteChat } from "@/app/(chat)/_lib/actions"
 import { getMessagesByChatId } from "@/app/(chat)/_lib/queries"
 import {
   AlertDialog,
-  AlertDialogAction,
   AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
@@ -14,7 +13,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { DeleteButton } from "./_components/delete-button"
 
-export default async function ChatPage(props: PageProps<"/chat/[chatId]">) {
+export default async function ChatPage(props: PageProps<"/[chatId]">) {
   const { chatId } = await props.params
   const messages = await getMessagesByChatId(chatId)
 

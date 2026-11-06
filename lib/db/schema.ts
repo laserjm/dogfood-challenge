@@ -39,7 +39,7 @@ export const messagesTable = pgTable("messages", {
     .references(() => chatsTable.id),
   createdAt: timestamp("createdAt").notNull(),
   id: uuid("id").primaryKey().notNull().defaultRandom(),
-  parts: json("parts").notNull(),
+  parts: json("parts").$type<{ type: string; text?: string }[]>().notNull(),
   role: varchar("role").notNull(),
 })
 

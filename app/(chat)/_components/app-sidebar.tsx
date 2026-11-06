@@ -31,6 +31,18 @@ export function AppSidebar() {
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
+        <SidebarGroup>
+          <SidebarGroupLabel>Other</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton render={<Link href="/" />}>
+                  <span>Home</span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
       </SidebarContent>
       <SidebarFooter>Footer</SidebarFooter>
     </Sidebar>
@@ -42,7 +54,7 @@ async function ChatList() {
 
   return chats.map((chat) => (
     <SidebarMenuItem key={chat.id}>
-      <SidebarMenuButton render={<Link href={`/chat/${chat.id}`} />}>
+      <SidebarMenuButton render={<Link href={`/${chat.id}`} />}>
         <span>{chat.title}</span>
       </SidebarMenuButton>
     </SidebarMenuItem>

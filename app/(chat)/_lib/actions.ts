@@ -7,6 +7,18 @@ import { and, eq } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { redirect } from "next/navigation"
 
+export async function createChat() {
+  const user = await requireUser()
+
+  const [chat] = await db
+    .insert(chatsTable)
+    .values({ userId: user.id, title: "New chat", createdAt: new Date() })
+    .returning({ id: chatsTable.id })
+
+  revalidatePath("/")
+  redirect(`/${chat.id}`)
+}
+
 export async function deleteChat(chatId: string) {
   const user = await requireUser()
 
@@ -22,6 +34,6 @@ export async function deleteChat(chatId: string) {
     await tx.delete(chatsTable).where(eq(chatsTable.id, chatId))
   })
 
-  revalidatePath("/chat")
-  redirect("/chat")
+  revalidatePath("/")
+  redirect("/")
 }
