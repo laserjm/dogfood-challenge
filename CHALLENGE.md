@@ -109,10 +109,10 @@ Eight stages, each ending in a working, committable state. AI enters the app onl
 **Decide and write down:** ID strategy (the AI SDK generates message IDs on the client), role column type, how `parts` are stored, the ordering column, FK delete behaviour, timestamps.
 
 - [x] Migrations apply cleanly on a fresh database
-- [ ] Seed creates 2 chats with a few messages each
-- [ ] Querying a chat's messages returns the right order, even when two rows share a timestamp
-- [ ] Deleting a chat removes its messages
-- [ ] No file outside the data-access layer imports the DB client
+- [x] Seed creates 2 chats with a few messages each
+- [x] Querying a chat's messages returns the right order, even when two rows share a timestamp
+- [x] Deleting a chat removes its messages
+- [x] No file outside the data-access layer imports the DB client
 
 **Convention focus:** Naming — table names (singular/plural), snake\_case in SQL vs camelCase in TS, schema file names, query function names (`getChatById` vs `findChat`).
 
