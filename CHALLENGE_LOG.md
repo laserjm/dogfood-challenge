@@ -17,7 +17,7 @@ app/
 │  ├─ _lib/
 │  │  ├─ queries.ts            # reads: requireUser() → db → DTO
 │  │  └─ actions.ts            # 'use server' writes: requireUser() → parse → db → revalidate/redirect
-│  ├─ _components/             # server + client components, render only
+│  ├─ _components/             # render; async server components may await a query, never the db
 │  └─ [chatId]/
 │     ├─ page.tsx
 │     └─ _components/
@@ -34,11 +34,25 @@ lib/
 
 1. **Every query and action calls `requireUser()` on its first line.** Reads filter by the caller (`eq(table.userId, user.id)`), writes scope by the caller. The ownership check is the policy.
 2. **Only `_lib/*` and `lib/` import the db.** Pages and components never do.
-3. **`import 'server-only'`** at the top of every `_lib` file, `lib/auth` and `lib/db/client.ts`. Not `schema.ts`: drizzle-kit and `seed.ts` load it outside Next.
+3. **`import 'server-only'`** at the top of every `_lib` file, `lib/auth` and `lib/db/client.ts`. In `actions.ts`, `'use server'` comes first, then `import 'server-only'` (both are allowed per the Next 16 data-security guide). Not `schema.ts`: drizzle-kit and `seed.ts` load it outside Next.
 4. **`lib/` never imports `app/`.**
 5. **UI never decides permissions.** Queries put flags on the DTO (`chat.canDelete`); components only render them.
 
-Rules 2, 3, 4 and the module import rules are enforced in `eslint.config.mjs` with core `no-restricted-imports` plus one small inline rule for `server-only`. Rules 1 and 5 are review rules: ESLint can't see whether a query filters by the caller or whether a component made a permission decision.
+Rules 2, 3, 4 and the module import rules are enforced in `eslint.config.mjs` with core `no-restricted-imports` plus two small inline rules: `require-server-only`, and `require-use-server` for `_lib/actions.ts`. Rules 1 and 5 are review rules: ESLint can't see whether a query filters by the caller or whether a component made a permission decision.
+
+**Data in components.** A server component in `_components/` may await a function from
+`_lib/queries.ts` when it owns that data (e.g. the sidebar's chat list), wrapped in
+`<Suspense>` next to it. Client components get data as props or as a promise (`use`).
+Neither imports the db (Rule 2), and neither decides permissions (Rule 5).
+Source: Next 16 docs, "Fetching data" (fetch where it's needed, Suspense close to the data).
+
+### Errors
+
+- **Missing or not-owned resource:** `notFound()`, in queries' callers and in actions. Same
+  response for both, so ownership isn't leaked.
+- **Invalid input:** return `{ error }` from the action (for `useActionState`), don't throw.
+- **`throw`:** only for bugs and broken invariants; `error.tsx` catches them.
+- **Domain error classes** (`ChatNotFound`) only after promotion to `modules/` (soft trigger 8).
 
 ### Promotion ladder (optional, create on trigger)
 
@@ -80,3 +94,34 @@ When a module exists: `app/` imports only its `index.ts`, the module never impor
 - The "only `lib/auth` can mint an `AuthCtx`" compiler trick as a default. It is a good pattern once a module is called from more than one adapter; before that it only adds a parameter to every function.
 - The full "who may import what" table. Rules 2 and 4 cover it.
 - `index.ts` as a public API boundary before `modules/` exists.
+
+### Naming
+
+#### UI layer (`actions.ts`, `queries.ts`, `components/`, `app/`)
+
+| Kind                     | File                                                      | Identifier                                                        | Example                       |
+| ------------------------ | --------------------------------------------------------- | ----------------------------------------------------------------- | ----------------------------- |
+| Server action            | `actions.ts`                                              | `<useCase>Action`                                                 | `payOrderAction`              |
+| Cached query             | `queries.ts`                                              | `<verb><Noun>`                                                    | `getOrder(id)`                |
+| Command (wired use case) | `commands.ts`, exported via `server.ts`                   | the use case's name, `(requester, input)`                         | `payOrder(requester, input)`  |
+| Cache tags               | `queries.ts`                                              | `<NOUN>_TAGS = { all: '<nouns>', one: (id) => \`<noun>:${id}\` }` | `ORDER_TAGS`                  |
+| Revalidation helper      | `actions.ts`, exported via `index.ts`                     | `revalidate<Noun>(id)`                                            | `revalidateOrder`             |
+| Component                | `components/<noun>-<role>.tsx`                            | `<Noun><Role>`, props `<Component>Props`                          | `OrderCard`, `OrderCardProps` |
+| Client component         | same; file starts with `'use client'`; no `Client` suffix |                                                                   |                               |
+| Hook                     | `components/use-<thing>.ts`                               | `use<Thing>`                                                      | `useOrderForm`                |
+| Route-local component    | `app/.../_components/<noun>-<role>.tsx`                   | same                                                              |                               |
+| Page component           | `page.tsx`                                                | `<Noun>Page` / `<Nouns>Page`                                      | `OrdersPage`                  |
+
+Component role vocabulary (second word): `List`, `Table`, `Card`, `Row`, `Form`, `Dialog`,
+`Sheet`, `Panel`, `Badge`, `Summary`, `Picker`, `Select`, `Filters`, `Toolbar`, `Empty`.
+
+#### Data layer (`lib/db/schema.ts`, `_lib/queries.ts`)
+
+| Kind      | Where                                       | Identifier                                | Example                      |
+| --------- | ------------------------------------------- | ----------------------------------------- | ---------------------------- |
+| Table     | `lib/db/schema.ts`                          | `<nouns>Table`; SQL name plural `<nouns>` | `chatsTable` → `"chats"`     |
+| Row type  | not exported; derive inline inside `_lib/`  | `typeof <nouns>Table.$inferSelect`        | `typeof messagesTable.$inferSelect["parts"]` |
+| DTO       | the `queries.ts` that returns it            | `<Noun><Shape>`                           | `ChatDetail`, `ChatListItem` |
+
+`schema.ts` exports tables only. A DTO is the contract between a query and its UI, so it lives
+next to the query that returns it; UI imports the DTO type from there, never a row type.

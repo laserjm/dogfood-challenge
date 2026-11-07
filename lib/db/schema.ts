@@ -1,4 +1,3 @@
-import { InferSelectModel } from "drizzle-orm"
 import {
   integer,
   json,
@@ -16,8 +15,6 @@ export const usersTable = pgTable("users", {
   email: varchar({ length: 255 }).notNull().unique(),
 })
 
-export type User = InferSelectModel<typeof usersTable>
-
 export const chatsTable = pgTable("chats", {
   createdAt: timestamp("createdAt").notNull(),
   id: uuid("id").primaryKey().notNull().defaultRandom(),
@@ -30,8 +27,6 @@ export const chatsTable = pgTable("chats", {
     .default("private"),
 })
 
-export type chats = InferSelectModel<typeof chatsTable>
-
 export const messagesTable = pgTable("messages", {
   attachments: json("attachments").notNull(),
   chatId: uuid("chatId")
@@ -43,5 +38,3 @@ export const messagesTable = pgTable("messages", {
   role: varchar("role").notNull(),
   position: integer("position").notNull(), // stable order
 })
-
-export type DBMessages = InferSelectModel<typeof messagesTable>

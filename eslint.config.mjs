@@ -19,6 +19,27 @@ const requireServerOnly = {
   },
 };
 
+// Local rule: file must start with the `'use server'` directive.
+// Without it, `_lib/actions.ts` exports plain functions and forms can't call them.
+const requireUseServer = {
+  meta: { type: "problem", messages: { missing: "File must begin with `'use server'`." } },
+  create(context) {
+    return {
+      Program(node) {
+        const first = node.body[0];
+        const ok = first?.type === "ExpressionStatement" && first.directive === "use server";
+        if (!ok) context.report({ node: first ?? node, messageId: "missing" });
+      },
+    };
+  },
+};
+
+// One plugin object for both inline rules: flat config refuses to redefine a plugin
+// name with a different object.
+const localPlugin = {
+  rules: { "require-server-only": requireServerOnly, "require-use-server": requireUseServer },
+};
+
 // Import patterns, named once. Each file must match exactly one block that sets
 // `no-restricted-imports`: in flat config a later block replaces the options, it does not merge.
 const noDbInUi = {
@@ -58,8 +79,15 @@ const eslintConfig = defineConfig([
   {
     files: ["app/**/_lib/**", "lib/db/**", "lib/auth.ts", "lib/auth/**", "modules/**"],
     ignores: ["lib/db/migrations/**", "lib/db/schema.ts"],
-    plugins: { local: { rules: { "require-server-only": requireServerOnly } } },
+    plugins: { local: localPlugin },
     rules: { "local/require-server-only": "error" },
+  },
+
+  // Rule 3, actions: `'use server'` first, then `import 'server-only'` (checked above).
+  {
+    files: ["app/**/_lib/actions.ts"],
+    plugins: { local: localPlugin },
+    rules: { "local/require-use-server": "error" },
   },
 
   // Rule 4: lib/ never imports app/ (or modules/).

@@ -1,7 +1,7 @@
 import { Suspense } from "react"
 import Link from "next/link"
 
-import { getChatsByUserId } from "@/app/(chat)/_lib/queries"
+import { getChats } from "@/app/(chat)/_lib/queries"
 import {
   Sidebar,
   SidebarContent,
@@ -50,7 +50,7 @@ export function AppSidebar() {
 }
 
 async function ChatList() {
-  const chats = await getChatsByUserId()
+  const chats = await getChats()
 
   return chats.map((chat) => (
     <SidebarMenuItem key={chat.id}>

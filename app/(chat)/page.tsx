@@ -1,11 +1,11 @@
 import { Button } from "@/components/ui/button"
-import { createChat } from "./_lib/actions"
+import { createChatAction } from "./_lib/actions"
 
-export default async function ChatShell() {
+export default async function ChatsPage() {
   return (
     <>
       <div>ChatShell</div>
-      <form action={createChat}>
+      <form action={createChatAction}>
         <Button type="submit">Click me</Button>
       </form>
     </>

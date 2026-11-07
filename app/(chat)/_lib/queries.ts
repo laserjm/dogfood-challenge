@@ -17,7 +17,7 @@ export type ChatDetail = {
   }[]
 }
 
-export async function getChatsByUserId(): Promise<ChatListItem[]> {
+export async function getChats(): Promise<ChatListItem[]> {
   const user = await requireUser()
   return db
     .select({ id: chatsTable.id, title: chatsTable.title })
@@ -26,7 +26,7 @@ export async function getChatsByUserId(): Promise<ChatListItem[]> {
     .orderBy(desc(chatsTable.createdAt)) // Stage 2: newest first
 }
 
-export async function getChatById(chatId: string): Promise<ChatDetail | null> {
+export async function getChat(id: string): Promise<ChatDetail | null> {
   const user = await requireUser()
 
   const [chat] = await db
@@ -36,7 +36,7 @@ export async function getChatById(chatId: string): Promise<ChatDetail | null> {
       userId: chatsTable.userId,
     })
     .from(chatsTable)
-    .where(and(eq(chatsTable.id, chatId), eq(chatsTable.userId, user.id)))
+    .where(and(eq(chatsTable.id, id), eq(chatsTable.userId, user.id)))
   if (!chat) return null
 
   const messages = await db
