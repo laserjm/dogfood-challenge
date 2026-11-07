@@ -1,6 +1,7 @@
 import "server-only"
 import { and, asc, desc, eq } from "drizzle-orm"
 import { requireUser } from "@/lib/auth"
+import { isUuid } from "@/lib/ids"
 import { db } from "@/lib/db/client"
 import { chatsTable, messagesTable } from "@/lib/db/schema"
 
@@ -28,6 +29,7 @@ export async function getChats(): Promise<ChatListItem[]> {
 
 export async function getChat(id: string): Promise<ChatDetail | null> {
   const user = await requireUser()
+  if (!isUuid(id)) return null
 
   const [chat] = await db
     .select({

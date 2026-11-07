@@ -1,6 +1,7 @@
 "use server"
 import "server-only"
 import { requireUser } from "@/lib/auth"
+import { isUuid } from "@/lib/ids"
 import { db } from "@/lib/db/client"
 import { chatsTable, messagesTable } from "@/lib/db/schema"
 import { and, eq } from "drizzle-orm"
@@ -21,6 +22,7 @@ export async function createChatAction() {
 
 export async function deleteChatAction(chatId: string) {
   const user = await requireUser()
+  if (!isUuid(chatId)) notFound()
 
   await db.transaction(async (tx) => {
     const [chat] = await tx
