@@ -7,6 +7,7 @@ import { chatsTable, messagesTable } from "@/lib/db/schema"
 import { and, eq } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 import { notFound, redirect } from "next/navigation"
+import { DatabaseMessages } from "../[chatId]/_components/chat-page"
 
 export async function createChatAction() {
   const user = await requireUser()
@@ -38,4 +39,39 @@ export async function deleteChatAction(chatId: string) {
 
   revalidatePath("/")
   redirect("/")
+}
+
+export async function upsertMessageAction(
+  chatId: string,
+  message: DatabaseMessages,
+  position: number
+) {
+  const user = await requireUser()
+  if (!isUuid(chatId) || !isUuid(message.id)) notFound()
+
+  // Only allow writing into chats owned by the current user
+  const [chat] = await db
+    .select({ id: chatsTable.id })
+    .from(chatsTable)
+    .where(and(eq(chatsTable.id, chatId), eq(chatsTable.userId, user.id)))
+  if (!chat) notFound()
+
+  const [saved] = await db
+    .insert(messagesTable)
+    .values({
+      id: message.id,
+      chatId,
+      role: message.role,
+      parts: message.parts,
+      attachments: [],
+      position,
+      createdAt: new Date(),
+    })
+    .onConflictDoUpdate({
+      target: messagesTable.id,
+      set: { role: message.role, parts: message.parts, position },
+    })
+    .returning({ id: messagesTable.id })
+
+  return saved
 }
