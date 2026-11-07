@@ -34,7 +34,7 @@ export function ChatDeleteDialog({ chatId }: ChatDeleteDialogProps) {
         <form action={deleteChatAction.bind(null, chatId)}>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <SubmitAction />
+            <SubmitButton />
           </AlertDialogFooter>
         </form>
       </AlertDialogContent>
@@ -44,7 +44,7 @@ export function ChatDeleteDialog({ chatId }: ChatDeleteDialogProps) {
 
 // useFormStatus only reads the parent <form> from a child component, so the
 // pending button stays a separate (unexported) component.
-function SubmitAction() {
+function SubmitButton() {
   const { pending } = useFormStatus()
   return (
     <AlertDialogAction type="submit" variant="destructive" disabled={pending}>
