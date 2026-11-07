@@ -1,21 +1,11 @@
-# Next.js template
-
-This is a Next.js template with shadcn/ui.
-
-## Adding components
-
-To add components to your app, run the following command:
+# Non AI Coding Challenge
 
 ```bash
-npx shadcn@latest add button
-```
+git switch -c stage-2        # branches from the commit that has cp-1
+# … work, commit …
+git tag -a cp-2 -m "Stage 2 done"     # on the branch's last commit, after self-check
+# review: git diff cp-1..cp-2, then fix
+git switch main
+git merge --no-ff stage-2    # or --ff-only
 
-This will place the ui components in the `components` directory.
-
-## Using components
-
-To use the components in your app, import them as follows:
-
-```tsx
-import { Button } from "@/components/ui/button";
 ```

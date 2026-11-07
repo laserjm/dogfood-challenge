@@ -120,10 +120,10 @@ Eight stages, each ending in a working, committable state. AI enters the app onl
 
 **Build:** Sidebar listing chats (newest first), "New chat" that creates a row and navigates to `/chats/[id]`, a chat page showing stored messages from the seed, delete with confirmation.
 
-- [ ] New chat appears in the sidebar and persists after reload
-- [ ] Opening a seeded chat shows its messages in order, with user and assistant visually distinct
-- [ ] Deleting a chat removes it from the sidebar and redirects sensibly
-- [ ] An unknown chat ID shows a 404, not a crash
+- [x] New chat appears in the sidebar and persists after reload
+- [x] Opening a seeded chat shows its messages in order, with user and assistant visually distinct
+- [x] Deleting a chat removes it from the sidebar and redirects sensibly
+- [x] An unknown chat ID shows a 404, not a crash
 
 **Convention focus:** Access logic — may components import data-access functions directly? Server Actions vs route handlers: which for what, and how are they named?
 
