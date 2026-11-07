@@ -1,60 +1,17 @@
 import "server-only"
-import { and, asc, desc, eq } from "drizzle-orm"
 import { requireUser } from "@/lib/auth"
 import { isUuid } from "@/lib/ids"
-import { db } from "@/lib/db/client"
-import { chatsTable, messagesTable } from "@/lib/db/schema"
+import * as chats from "@/modules/chats"
 
-export type ChatListItem = { id: string; title: string }
+// Adapter: requireUser() → parse → module query.
 
-export type ChatDetail = {
-  id: string
-  title: string
-  canDelete: boolean
-  messages: {
-    id: string
-    role: string
-    parts: (typeof messagesTable.$inferSelect)["parts"]
-  }[]
-}
-
-export async function getChats(): Promise<ChatListItem[]> {
+export async function getChats() {
   const user = await requireUser()
-  return db
-    .select({ id: chatsTable.id, title: chatsTable.title })
-    .from(chatsTable)
-    .where(eq(chatsTable.userId, user.id))
-    .orderBy(desc(chatsTable.createdAt)) // Stage 2: newest first
+  return chats.getChats(user)
 }
 
-export async function getChat(id: string): Promise<ChatDetail | null> {
+export async function getChat(id: string) {
   const user = await requireUser()
   if (!isUuid(id)) return null
-
-  const [chat] = await db
-    .select({
-      id: chatsTable.id,
-      title: chatsTable.title,
-      userId: chatsTable.userId,
-    })
-    .from(chatsTable)
-    .where(and(eq(chatsTable.id, id), eq(chatsTable.userId, user.id)))
-  if (!chat) return null
-
-  const messages = await db
-    .select({
-      id: messagesTable.id,
-      role: messagesTable.role,
-      parts: messagesTable.parts,
-    })
-    .from(messagesTable)
-    .where(eq(messagesTable.chatId, chat.id))
-    .orderBy(asc(messagesTable.position))
-
-  return {
-    id: chat.id,
-    title: chat.title,
-    canDelete: chat.userId === user.id,
-    messages,
-  }
+  return chats.getChat(user, id)
 }

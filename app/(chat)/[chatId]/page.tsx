@@ -4,8 +4,7 @@ import { Message, MessageContent, MessageGroup } from "@/components/ui/message"
 import { notFound } from "next/navigation"
 import { Streamdown } from "streamdown"
 import { ChatDeleteDialog } from "./_components/chat-delete-dialog"
-import ChatClientPage from "./_components/chat-page"
-import { UIMessage } from "ai"
+import { ChatPanel } from "./_components/chat-panel"
 
 export default async function ChatPage(props: PageProps<"/[chatId]">) {
   const { chatId } = await props.params
@@ -21,10 +20,7 @@ export default async function ChatPage(props: PageProps<"/[chatId]">) {
         {chat.canDelete && <ChatDeleteDialog chatId={chatId} />}
       </header>
 
-      <ChatClientPage
-        id={chatId}
-        initialMessages={chat.messages as UIMessage[]}
-      />
+      <ChatPanel chatId={chatId} initialMessages={chat.messages} />
 
       {/* <div className="flex-1 overflow-y-auto">
         <MessageGroup className="mx-auto w-full max-w-3xl gap-6 px-4 py-8">

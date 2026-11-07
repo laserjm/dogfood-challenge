@@ -1,33 +1,27 @@
 "use client"
 
 import Spinner from "@/components/spinner"
+import type { ChatMessage } from "@/modules/chats"
 import { useChat } from "@ai-sdk/react"
-import { DefaultChatTransport, type UIMessage } from "ai"
+import { DefaultChatTransport } from "ai"
 import { useState } from "react"
 
-export type Parts = {
-  type: string
-  text: string
+export type ChatPanelProps = {
+  chatId: string
+  initialMessages: ChatMessage[]
 }
 
-export type DatabaseMessages = {
-  id: string
-  role: "user" | "assistant"
-  parts: Parts[]
-}
-
-export type ChatMessagesProps = {
-  id: string
-  initialMessages: UIMessage[]
-}
-
-export default function Page({ id, initialMessages }: ChatMessagesProps) {
+export function ChatPanel({ chatId, initialMessages }: ChatPanelProps) {
   const { messages, sendMessage, status, stop } = useChat({
-    id: id,
+    id: chatId,
     messages: initialMessages,
     generateId: () => crypto.randomUUID(),
     transport: new DefaultChatTransport({
       api: "/api/chat",
+      // Send only the newest message; the server loads the history from the db.
+      prepareSendMessagesRequest: ({ id, messages }) => ({
+        body: { chatId: id, message: messages.at(-1) },
+      }),
     }),
     onFinish: ({ message, messages, isError }) => {
       console.log(

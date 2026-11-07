@@ -51,6 +51,15 @@ const moduleViaIndex = {
   group: ["@/modules/*/*"],
   message: "Import a module only through its index.ts (`@/modules/<x>`).",
 };
+const noComponentsInLib = {
+  group: ["**/_components", "**/_components/*"],
+  message: "`_lib` never imports `_components`. Types the UI needs live in the query that returns them.",
+};
+const noRouteLibInApi = {
+  group: ["**/_lib", "**/_lib/*", "**/_components", "**/_components/*"],
+  message:
+    "Route handlers never import a route's `_lib` or `_components`. Shared logic lives in `@/modules/<x>`.",
+};
 
 const eslintConfig = defineConfig([
   ...nextVitals,
@@ -62,13 +71,20 @@ const eslintConfig = defineConfig([
   {
     files: ["app/**/_lib/**"],
     rules: {
-      "no-restricted-imports": ["error", { patterns: [moduleViaIndex] }],
+      "no-restricted-imports": ["error", { patterns: [moduleViaIndex, noComponentsInLib] }],
+    },
+  },
+  // Route handlers are adapters: no db, no route `_lib`/`_components`, modules via index.ts.
+  {
+    files: ["app/api/**"],
+    rules: {
+      "no-restricted-imports": ["error", { patterns: [noDbInUi, noRouteLibInApi, moduleViaIndex] }],
     },
   },
   // UI code (pages, components, hooks): no db, and modules only through their index.ts.
   {
     files: ["app/**", "components/**", "hooks/**"],
-    ignores: ["app/**/_lib/**"],
+    ignores: ["app/**/_lib/**", "app/api/**"],
     rules: {
       "no-restricted-imports": ["error", { patterns: [noDbInUi, moduleViaIndex] }],
     },
@@ -77,7 +93,7 @@ const eslintConfig = defineConfig([
   // Rule 3: server-only on every file that touches db or auth.
   // schema.ts is exempt: drizzle-kit and seed.ts load it outside Next, where `server-only` throws.
   {
-    files: ["app/**/_lib/**", "lib/db/**", "lib/auth.ts", "lib/auth/**", "modules/**"],
+    files: ["app/**/_lib/**", "app/api/**", "lib/db/**", "lib/auth.ts", "lib/auth/**", "modules/**"],
     ignores: ["lib/db/migrations/**", "lib/db/schema.ts"],
     plugins: { local: localPlugin },
     rules: { "local/require-server-only": "error" },

@@ -21,6 +21,17 @@ app/
 │  └─ [chatId]/
 │     ├─ page.tsx
 │     └─ _components/
+├─ api/
+│  └─ chat/route.ts            # route handler (adapter): requireUser() → parse → module → stream
+modules/
+└─ chats/                      # promoted at Stage 3 (hard trigger 1: the chat route handler)
+   ├─ index.ts                 # public API; app/ imports only this
+   ├─ contracts.ts             # zod input schemas + inferred types
+   ├─ queries.ts               # reads (requester, …) → DTO; DTO types live here
+   ├─ commands.ts              # writes (requester, input)
+   ├─ mappers.ts               # row ⇄ DTO
+   ├─ repo.ts                  # db queries shared by reads and writes (ownership check)
+   └─ errors.ts                # ChatNotFound
 components/
 hooks/
 lib/
@@ -32,13 +43,13 @@ lib/
 
 ### Hard rules (always)
 
-1. **Every query and action calls `requireUser()` on its first line.** Reads filter by the caller (`eq(table.userId, user.id)`), writes scope by the caller. The ownership check is the policy.
-2. **Only `_lib/*` and `lib/` import the db.** Pages and components never do.
-3. **`import 'server-only'`** at the top of every `_lib` file, `lib/auth` and `lib/db/client.ts`. In `actions.ts`, `'use server'` comes first, then `import 'server-only'` (both are allowed per the Next 16 data-security guide). Not `schema.ts`: drizzle-kit and `seed.ts` load it outside Next.
+1. **Every query, action and route handler calls `requireUser()` on its first line.** Module functions don't: they take the user as `requester`. Reads filter by the caller (`eq(table.userId, user.id)`), writes scope by the caller. The ownership check is the policy.
+2. **Only `_lib/*`, `modules/*` and `lib/` import the db.** Pages, components and route handlers never do.
+3. **`import 'server-only'`** at the top of every `_lib` file, every `modules/` file, every route handler (`app/api/**`), `lib/auth` and `lib/db/client.ts`. In `actions.ts`, `'use server'` comes first, then `import 'server-only'` (both are allowed per the Next 16 data-security guide). Not `schema.ts`: drizzle-kit and `seed.ts` load it outside Next.
 4. **`lib/` never imports `app/`.**
 5. **UI never decides permissions.** Queries put flags on the DTO (`chat.canDelete`); components only render them.
 
-Rules 2, 3, 4 and the module import rules are enforced in `eslint.config.mjs` with core `no-restricted-imports` plus two small inline rules: `require-server-only`, and `require-use-server` for `_lib/actions.ts`. Rules 1 and 5 are review rules: ESLint can't see whether a query filters by the caller or whether a component made a permission decision.
+Rules 2, 3, 4 and the module import rules are enforced in `eslint.config.mjs` with core `no-restricted-imports` plus two small inline rules: `require-server-only`, and `require-use-server` for `_lib/actions.ts`. Also enforced there: `_lib` never imports `_components`, and route handlers never import a route's `_lib` or `_components` (a server action is not an API for other adapters). Rules 1 and 5 are review rules: ESLint can't see whether a query filters by the caller or whether a component made a permission decision.
 
 **Data in components.** A server component in `_components/` may await a function from
 `_lib/queries.ts` when it owns that data (e.g. the sidebar's chat list), wrapped in
@@ -52,7 +63,7 @@ Source: Next 16 docs, "Fetching data" (fetch where it's needed, Suspense close t
   response for both, so ownership isn't leaked.
 - **Malformed id:** same as missing. `_lib` parses every id before it reaches the db
   (`isUuid` from `lib/ids.ts`); queries return `null`, actions call `notFound()`.
-- **Invalid input:** return `{ error }` from the action (for `useActionState`), don't throw.
+- **Invalid input:** return `{ error }` from the action (for `useActionState`), don't throw. A route handler returns `400` with `{ error }`.
 - **`throw`:** only for bugs and broken invariants; `error.tsx` catches them.
 - **Domain error classes** (`ChatNotFound`) only after promotion to `modules/` (soft trigger 8).
 
@@ -60,7 +71,7 @@ Source: Next 16 docs, "Fetching data" (fetch where it's needed, Suspense close t
 
 | File                        | Create it when                                                                 |
 | --------------------------- | ------------------------------------------------------------------------------ |
-| `schema.ts` (zod)           | An action takes more than an id. Until then, parse inline in the action.       |
+| `contracts.ts` (zod)        | An action takes more than an id. Until then, parse inline in the action.       |
 | `policy.ts`                 | A rule is more than "owner can": roles, sharing, admin. Pure functions, no db. |
 | `repo.ts`                   | The same db query appears in both a read and a write path, or in two routes.   |
 | `modules/<x>/` + `index.ts` | See the promotion triggers below.                                              |
@@ -105,7 +116,8 @@ When a module exists: `app/` imports only its `index.ts`, the module never impor
 | ------------------------ | --------------------------------------------------------- | ----------------------------------------------------------------- | ----------------------------- |
 | Server action            | `actions.ts`                                              | `<useCase>Action`                                                 | `payOrderAction`              |
 | Query                    | `queries.ts`                                              | `<verb><Noun>`                                                    | `getOrder(id)`                |
-| Command (wired use case) | `commands.ts`, exported via `server.ts`                   | the use case's name, `(requester, input)`                         | `payOrder(requester, input)`  |
+| Command (wired use case) | `modules/<x>/commands.ts`, exported via `index.ts`        | the use case's name, `(requester, input)`                         | `payOrder(requester, input)`  |
+| Input contract (zod)     | `contracts.ts`                                            | `<useCase>Input`; inferred type `<UseCase>Input`                  | `sendMessageInput`            |
 | Cache tags               | `queries.ts`                                              | `<NOUN>_TAGS = { all: '<nouns>', one: (id) => \`<noun>:${id}\` }` | `ORDER_TAGS`                  |
 | Revalidation helper      | `actions.ts`, exported via `index.ts`                     | `revalidate<Noun>(id)`                                            | `revalidateOrder`             |
 | Component                | `components/<noun>-<role>.tsx`                            | `<Noun><Role>`, props `<Component>Props`                          | `OrderCard`, `OrderCardProps` |
@@ -137,11 +149,28 @@ Don't rename it, and don't put your own components there.
 
 #### Data layer (`lib/db/schema.ts`, `_lib/queries.ts`)
 
-| Kind     | Where                                      | Identifier                                | Example                                      |
-| -------- | ------------------------------------------ | ----------------------------------------- | -------------------------------------------- |
-| Table    | `lib/db/schema.ts`                         | `<nouns>Table`; SQL name plural `<nouns>` | `chatsTable` → `"chats"`                     |
-| Row type | not exported; derive inline inside `_lib/` | `typeof <nouns>Table.$inferSelect`        | `typeof messagesTable.$inferSelect["parts"]` |
-| DTO      | the `queries.ts` that returns it           | `<Noun><Shape>`                           | `ChatDetail`, `ChatListItem`                 |
+| Kind     | Where                                             | Identifier                                | Example                                      |
+| -------- | ------------------------------------------------- | ----------------------------------------- | -------------------------------------------- |
+| Table    | `lib/db/schema.ts`                                | `<nouns>Table`; SQL name plural `<nouns>` | `chatsTable` → `"chats"`                     |
+| Row type | not exported; derive inline in `_lib/`/`modules/` | `typeof <nouns>Table.$inferSelect`        | `typeof messagesTable.$inferSelect["parts"]` |
+| DTO      | the `queries.ts` that returns it                  | `<Noun><Shape>`                           | `ChatDetail`, `ChatListItem`                 |
+| Mapper   | `modules/<x>/mappers.ts`, not exported            | `to<TargetType>`                          | `toChatMessage(row)`, `toMessageRow(…)`      |
 
 `schema.ts` exports tables only. A DTO is the contract between a query and its UI, so it lives
-next to the query that returns it; UI imports the DTO type from there, never a row type.
+next to the query that returns it (`_lib/queries.ts`, or `modules/<x>/queries.ts` exported via
+`index.ts`); UI imports the DTO type from there, never a row type. Client components use
+`import type` from a module, so `server-only` never reaches the browser bundle.
+
+## Stage 3: AI Gateway hello world
+
+- Time: _fill in_
+- Highest AI level: _fill in_
+
+**Convention friction**
+
+- The chat route handler imported a server action (`upsertMessageAction`), because neither the folder tree nor lint mentioned `app/api/`. Fixed by promoting `chats` to `modules/` (hard trigger 1) and adding lint rules for `app/api/**`.
+- Message types (`DatabaseMessages`, `Parts`) ended up in a client component and were imported by `_lib` and the route. The log said where DTOs live, but not that `_lib` must never import `_components`. Now enforced by lint.
+- The log didn't say where provider/AI code lives. For now the model call stays in the route handler; the model id comes from `lib/env.ts`.
+- The naming table said commands are exported via `server.ts`, the promotion section said `index.ts`. Settled on `index.ts`.
+- No rule for mapper or zod-schema names. Added `to<TargetType>` and `<useCase>Input`.
+- Decision for Stage 4: only completed assistant replies are stored (`outcome.status === "completed"`); aborted and failed replies are dropped.
