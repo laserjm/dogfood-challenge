@@ -41,6 +41,7 @@ export const messagesTable = pgTable("messages", {
   id: uuid("id").primaryKey().notNull().defaultRandom(),
   parts: json("parts").$type<{ type: string; text?: string }[]>().notNull(),
   role: varchar("role").notNull(),
+  position: integer("position").notNull(), // stable order
 })
 
 export type DBMessage = InferSelectModel<typeof messagesTable>

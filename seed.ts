@@ -15,13 +15,15 @@ const textMessage = (
   chatId: string,
   role: "user" | "assistant",
   text: string,
-  createdAt: Date
+  createdAt: Date,
+  position: number
 ): typeof messagesTable.$inferInsert => ({
   chatId,
   role,
   parts: [{ type: "text", text }],
   attachments: [],
   createdAt,
+  position,
 })
 
 const chats = [
@@ -103,7 +105,8 @@ async function main() {
         created.id,
         role,
         text,
-        new Date(chat.createdAt.getTime() + i * 60_000)
+        new Date(chat.createdAt.getTime() + i * 60_000),
+        i
       )
     )
     await db.insert(messagesTable).values(rows)

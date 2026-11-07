@@ -1,3 +1,4 @@
+import "server-only"
 import { db } from "./db/client"
 import { usersTable } from "./db/schema"
 
