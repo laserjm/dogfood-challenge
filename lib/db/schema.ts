@@ -30,7 +30,7 @@ export const chatsTable = pgTable("chats", {
     .default("private"),
 })
 
-export type Chat = InferSelectModel<typeof chatsTable>
+export type chats = InferSelectModel<typeof chatsTable>
 
 export const messagesTable = pgTable("messages", {
   attachments: json("attachments").notNull(),
@@ -44,4 +44,4 @@ export const messagesTable = pgTable("messages", {
   position: integer("position").notNull(), // stable order
 })
 
-export type DBMessage = InferSelectModel<typeof messagesTable>
+export type DBMessages = InferSelectModel<typeof messagesTable>

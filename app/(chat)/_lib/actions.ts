@@ -1,3 +1,4 @@
+"use server"
 import "server-only"
 import { requireUser } from "@/lib/auth"
 import { db } from "@/lib/db/client"

@@ -1,13 +1,25 @@
 import "server-only"
+import { cache } from "react"
+import { asc } from "drizzle-orm"
 import { db } from "./db/client"
 import { usersTable } from "./db/schema"
 
-export const requireUser = async () => {
-  const user = await db.select().from(usersTable).limit(1).execute()
-  console.log(user[0])
-  return user[0]
-  return {
-    id: "3513f009-7201-47f2-bbb6-9777e85aa055",
-    name: "Bruno",
-  }
+export type SessionUser = { id: string; name: string }
+
+// Single-user mode: the "session" is the first user. Swap this body for a
+// real session lookup later; callers don't change.
+export const getUser = cache(async (): Promise<SessionUser | null> => {
+  const [user] = await db
+    .select({ id: usersTable.id, name: usersTable.name })
+    .from(usersTable)
+    .orderBy(asc(usersTable.email))
+    .limit(1)
+  return user ?? null
+})
+
+export async function requireUser(): Promise<SessionUser> {
+  const user = await getUser()
+  if (!user)
+    throw new Error("No user in the database. Run the seed script first.")
+  return user
 }

@@ -21,6 +21,8 @@ app/
 │  └─ [chatId]/
 │     ├─ page.tsx
 │     └─ _components/
+components/
+hooks/
 lib/
 ├─ auth.ts                     # getUser / requireUser, wrapped in cache()
 └─ db/                         # client, schema, migrations
@@ -40,12 +42,12 @@ Rules 2, 3, 4 and the module import rules are enforced in `eslint.config.mjs` wi
 
 ### Promotion ladder (optional, create on trigger)
 
-| File                       | Create it when                                                                                                   |
-| -------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| `schema.ts` (zod)          | An action takes more than an id. Until then, parse inline in the action.                                         |
-| `policy.ts`                | A rule is more than "owner can": roles, sharing, admin. Pure functions, no db.                                   |
-| `repo.ts`                  | The same db query appears in both a read and a write path, or in two routes.                                     |
-| `modules/<x>/` + `index.ts` | See the promotion triggers below.                                                                                |
+| File                        | Create it when                                                                 |
+| --------------------------- | ------------------------------------------------------------------------------ |
+| `schema.ts` (zod)           | An action takes more than an id. Until then, parse inline in the action.       |
+| `policy.ts`                 | A rule is more than "owner can": roles, sharing, admin. Pure functions, no db. |
+| `repo.ts`                   | The same db query appears in both a read and a write path, or in two routes.   |
+| `modules/<x>/` + `index.ts` | See the promotion triggers below.                                              |
 
 ### When to promote `_lib` to `modules/<x>/`
 

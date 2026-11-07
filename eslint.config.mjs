@@ -19,27 +19,37 @@ const requireServerOnly = {
   },
 };
 
+// Import patterns, named once. Each file must match exactly one block that sets
+// `no-restricted-imports`: in flat config a later block replaces the options, it does not merge.
+const noDbInUi = {
+  group: ["@/lib/db", "@/lib/db/*", "**/lib/db", "**/lib/db/*"],
+  message:
+    "Pages and components never import the db. Put the read in `_lib/queries.ts` or the write in `_lib/actions.ts`.",
+};
+const moduleViaIndex = {
+  group: ["@/modules/*/*"],
+  message: "Import a module only through its index.ts (`@/modules/<x>`).",
+};
+
 const eslintConfig = defineConfig([
   ...nextVitals,
   ...nextTs,
   globalIgnores([".next/**", "out/**", "build/**", "next-env.d.ts"]),
 
   // Rule 2: only `_lib/*`, `lib/` and `modules/` may import the db.
+  // `_lib` may import the db, but modules only through their index.ts.
   {
-    files: ["app/**"],
+    files: ["app/**/_lib/**"],
+    rules: {
+      "no-restricted-imports": ["error", { patterns: [moduleViaIndex] }],
+    },
+  },
+  // UI code (pages, components, hooks): no db, and modules only through their index.ts.
+  {
+    files: ["app/**", "components/**", "hooks/**"],
     ignores: ["app/**/_lib/**"],
     rules: {
-      "no-restricted-imports": [
-        "error",
-        {
-          patterns: [
-            {
-              group: ["@/lib/db", "@/lib/db/*", "**/lib/db", "**/lib/db/*"],
-              message: "Pages and components never import the db. Put the read in `_lib/queries.ts` or the write in `_lib/actions.ts`.",
-            },
-          ],
-        },
-      ],
+      "no-restricted-imports": ["error", { patterns: [noDbInUi, moduleViaIndex] }],
     },
   },
 
@@ -79,19 +89,6 @@ const eslintConfig = defineConfig([
           patterns: [
             { group: ["next/*"], message: "modules/ never import next/*. Keep redirect/revalidate in the route's actions.ts." },
             { group: ["@/app", "@/app/*"], message: "modules/ never import app/." },
-          ],
-        },
-      ],
-    },
-  },
-  {
-    files: ["app/**"],
-    rules: {
-      "no-restricted-imports": [
-        "error",
-        {
-          patterns: [
-            { group: ["@/modules/*/*"], message: "Import a module only through its index.ts (`@/modules/<x>`)." },
           ],
         },
       ],
