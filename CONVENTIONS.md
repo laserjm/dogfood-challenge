@@ -32,7 +32,7 @@ modules/<x>/              # one concept each (e.g. chats); created on a promotio
 ├─ index.ts               # session-bound API for app/: binds the current user (withUser)
 ├─ contracts.ts           # zod inputs in, DTO types out; the module's one browser-safe file
 ├─ queries.ts             # reads (requester, …) → DTO | null
-├─ commands.ts            # writes (requester, input); throw domain errors
+├─ commands.ts            # writes (requester, input); throw domain errors; exports use cases only
 ├─ domain.ts              # pure business rules over DTOs: calculations, state transitions (on trigger)
 ├─ policy.ts              # authorization beyond "the owner can"; pure functions (on trigger)
 ├─ repo.ts                # db queries shared by reads and writes (the ownership check)
@@ -41,14 +41,25 @@ modules/<x>/              # one concept each (e.g. chats); created on a promotio
 components/               # shared UI; components/ui/* is shadcn, untouched
 lib/
 ├─ auth.ts                # getUser / requireUser (cache()), withUser
-├─ env.ts                 # validated env; the only reader of process.env
-├─ <service>.ts           # client for an external service (AI, mail): built from env, handed to modules by adapters
+├─ env.ts                 # validated env; the only reader of process.env; parsed on first read, not on import
+├─ <service>.ts           # client for an external service (AI, mail): built from env, handed to modules by adapters;
+│                         #   also the readable text for that service's failures (describe<Service>Error)
 └─ db/                    # client, schema (code-first), generated migrations; errors.ts names the driver codes
-scripts/                  # seed and maintenance: system callers (optional)
+scripts/                  # seed (a fixture) and maintenance (a system caller); run outside Next
+test/                     # global-setup (test database) and factories (raw rows); run outside Next
+drizzle.config.ts         # tool configs and Next's root files (instrumentation.ts, proxy.ts):
+vitest.config.ts          #   loaded by a tool or by Next itself, never imported by app code
+instrumentation.ts
 ```
 
 A route is in one of two states, and the folder shows which: `_lib/` means the route talks to the
 db itself; a bare `actions.ts` next to `page.tsx` means a module does.
+
+**Code that runs outside Next.** `drizzle-kit`, `vitest` and `tsx scripts/…` load files without
+Next's bundler. Two things follow. `server-only` throws there, so a file such a tool loads can't
+start with it (Rule 4 lists them). And `.env.local` isn't loaded, so a tool entry point loads the
+env files itself before it reads `env` (Rule 9). Because `lib/env.ts` parses on first read, import
+order doesn't matter.
 
 ## Rules
 
@@ -57,12 +68,20 @@ db itself; a bare `actions.ts` next to `page.tsx` means a module does.
    Adapters never pass a user. _Lint for modules, review for `_lib`._
 2. **Every read filters by the caller, every write is scoped by the caller**
    (`eq(table.userId, requester.id)`). The ownership check is the policy. _Review, plus Testing §5._
-3. **Only `_lib/*`, `modules/*` and `lib/` import the db.** _Lint._
+3. **Only `_lib/*`, `modules/*` and `lib/` import the db.** Fixtures are the exception:
+   `test/` and `scripts/seed.ts` write raw rows to arrange state, and because they run outside
+   Next they build their own client from `env` (`lib/db/client.ts` is `server-only`). A script
+   that performs a use case is not a fixture; it goes through `commands.ts` (Rule 6). _Lint._
 4. **Server-side code starts with `import 'server-only'`;** in `actions.ts`, `'use server'` comes
-   first. Exempt: `contracts.ts` (browser-safe by design), `schema.ts` (drizzle-kit loads it
-   outside Next) and tests. _Lint._
+   first. Exempt: `contracts.ts` (browser-safe by design); every file a tool loads outside Next,
+   where `server-only` throws: `schema.ts`, `lib/env.ts`, tool configs, `scripts/` and `test/`;
+   and Next's root files (`instrumentation.ts`), which no app code imports. `lib/env.ts` holds no
+   values in source: imported into the browser it reads an empty `process.env` and fails loudly
+   instead of leaking. _Lint._
 5. **Dependencies point one way.** `lib/` imports neither `app/` nor `modules/`; `modules/` imports
-   neither `app/` nor `next/*`. Two modules that import each other are merged, or a third is
+   neither `app/` nor `next/*`. Packages are allowed, `ai` included: a use case that stores a
+   streamed reply has to own the stream, because the finished message only exists in the
+   stream's end callback. Two modules that import each other are merged, or a third is
    extracted. _Lint, cycles by review._
 6. **Three doors into a module, and no others.**
    - `app/` imports `index.ts` as a namespace (`import * as chats from "@/modules/chats"`): the
@@ -80,12 +99,22 @@ db itself; a bare `actions.ts` next to `page.tsx` means a module does.
 7. **UI never decides permissions.** Queries put flags on the DTO (`canDelete`); components render
    them. _Review._
 8. **No `as` cast** outside `mappers.ts`, `lib/db/` and `as const`. If the types don't line up, fix
-   the schema or add a mapper. `components/ui/*` is vendor code and exempt. _Lint._
+   the schema or add a mapper. `components/ui/*` is vendor code and exempt. A json column typed
+   with `$type<…>()` is a cast too: when its shape belongs to an SDK (a `UIMessage`'s parts), the
+   query validates the rows with the SDK's own validator (`validateUIMessages` in `ai`) before it
+   returns the DTO, and a row that fails is a bug. _Lint, `$type` by review._
 9. **`lib/env.ts` is the only reader of `process.env`.** Everything else, the db client included,
-   reads `env.X`, so a missing variable fails at startup, not in a request. _Lint._
+   reads `env.X`, so a missing variable fails at startup, not in a request. Outside Next, a tool
+   entry point (`drizzle.config.ts`, `scripts/*`) first loads the env files the way Next does, then
+   reads `env` like everything else. The one other reader is a test config that _sets_ the
+   environment for a run (`vitest.config.ts` choosing `TEST_DATABASE_URL`): it produces
+   configuration rather than consuming it. _Lint for app code, review for tools._
 10. **The schema is code-first and the database holds no logic.** `lib/db/schema.ts` is the source
-    of truth, migrations are generated and never hand-edited, and there are no database functions
-    and no triggers except `updated_at`. _Review._
+    of truth and schema migrations are generated. A data change that a schema change needs (filling
+    a column before `SET NOT NULL`) is its own custom migration (`drizzle-kit generate --custom`)
+    between two generated ones; a one-off backfill is not database logic. No migration is edited
+    once it has been applied anywhere. There are no database functions and no triggers except
+    `updated_at`. _Review._
 11. **A deviation is written down before it happens.** An `eslint-disable` carries a comment that
     links an ADR. A rule nobody can follow is changed in this file, not disabled in source.
     _Review._
@@ -128,6 +157,7 @@ the UI sees an error class.
 | Missing, not-owned or malformed id  | query returns `null`; command throws `<Noun>NotFound` | `notFound()`                                                           | `404` + `{ error }`         |
 | Forbidden (once `policy.ts` exists) | command throws `Forbidden`                            | `forbidden()` (needs `experimental.authInterrupts`), else `notFound()` | `403` + `{ error }`         |
 | Constraint refused the write        | command catches the driver error, throws `Conflict`   | `{ error }`                                                            | `409` + `{ error }`         |
+| Repeat of a write (same client id)  | same owner and parent: success; else `Conflict`       | as the first time                                                      | as the first time           |
 | Invalid input                       | never reached: the adapter parses with `contracts.ts` | `{ error }`                                                            | `400` + `{ error }`         |
 | Bug, broken invariant               | `throw new Error(…)`                                  | nearest `error.tsx`                                                    | `500` + `{ error }`, logged |
 
@@ -138,12 +168,30 @@ the UI sees an error class.
   would render the HTML page.
 - When a module must produce user-facing text itself, as in an error chunk after a stream has
   started, the adapter hands it in as a function. A module never holds copy.
+- A service's failures are worded where they are recognized: `lib/<service>.ts` exports a pure
+  `describe<Service>Error`, unit tested there, and the adapter hands it to the module. Telling
+  provider errors apart needs the provider's error classes, and only that file imports them.
+- A write keyed by an id the client generated (a message id) is safe to retry. "Already exists" is
+  success only when the existing row has the same owner and parent; matching on the id alone lets
+  a collision with another chat's row pass silently. Any other collision is `Conflict`.
 - The driver's error codes are recognized in one place, `lib/db/errors.ts` (`23505` unique,
   `23503` foreign key). A command catches there and throws `Conflict`; nothing else reads a driver
   error.
 - Error classes live in `modules/<x>/errors.ts`. A self-contained route has no adapter layer to
   map them, so it calls `notFound()` or returns `{ error }` directly; wanting named errors there is
   soft trigger 8.
+
+## Transactions
+
+- A transaction wraps an ownership check and the writes it guards: `repo.ts` takes the executor
+  (`db` or `tx`) as its first argument, so the check runs inside the same transaction.
+- A transaction never spans an external call (a model stream, an HTTP request). A use case that
+  streams writes in steps, each its own transaction, and each step checks ownership again: the
+  chat can be deleted while the reply streams.
+- A value derived from other rows (the next `position`, a counter) is guarded by the database: a
+  unique constraint, or a lock taken in the same transaction. Postgres' default isolation (read
+  committed) lets two transactions read the same `max()`. A unique constraint is not database
+  logic (Rule 10).
 
 ## Promotion: when `_lib` becomes `modules/<x>/`
 
@@ -204,6 +252,9 @@ triggers: "it might be reused later", many small actions in one file, a cleaner 
    functions with an explicit `requester`, as `index.ts` does after `withUser`. One
    `describe("<useCase>")` per function, `it("<behavior in plain words>")`. `index.ts`, `repo.ts`
    and `mappers.ts` are covered through them; a unit already exercised by a use case gets no test.
+   A step of a use case is not exported so it can be tested. When the use case needs an external
+   service, the test passes a fake through the parameter Rule 12 already requires (for a model,
+   `MockLanguageModelV4` from `ai/test`).
 2. **Real Postgres, no db mocks.** The ownership check is a `WHERE` clause; a mock tests the mock.
    `test/global-setup.ts` owns the test database (name must end in `_test`; `TEST_DATABASE_URL`
    overrides the default).
@@ -229,17 +280,18 @@ A module is named after a business noun, never a technical one: not `utils`, `co
 
 ### UI and use cases
 
-| Kind                 | File                                                                     | Identifier                                                                                                                               | Example                                                   |
-| -------------------- | ------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
-| Server action        | `actions.ts`                                                             | `<useCase>Action`                                                                                                                        | `deleteChatAction`                                        |
-| Query                | `queries.ts`                                                             | `get<Noun>` / `get<Nouns>`, returns `null` when missing (there is no `find`); in a module `(requester, …)`, bound to `(…)` by `index.ts` | `getChat(requester, id)` → `chats.getChat(id)`            |
-| Command              | `modules/<x>/commands.ts`                                                | the use case's name, same binding                                                                                                        | `deleteChat(requester, id)` → `chats.deleteChat(id)`      |
-| Domain rule          | `modules/<x>/domain.ts`, `policy.ts`                                     | a business verb or predicate, pure                                                                                                       | `applyCredits(chat, amount)`, `canShare(requester, chat)` |
-| Input contract (zod) | `contracts.ts`                                                           | `<useCase>Input`; inferred type `<UseCase>Input`                                                                                         | `sendMessageInput`, `SendMessageInput`                    |
-| Error class          | `errors.ts`                                                              | the fact that blocks the action                                                                                                          | `ChatNotFound`, `Conflict`                                |
-| Component            | `components/<noun>-<role>.tsx`, or `app/.../_components/` if route-local | `<Noun><Role>`, props `<Component>Props`; client components start with `'use client'`, no suffix                                         | `ChatList`, `ChatListProps`                               |
-| Hook                 | `hooks/use-<thing>.ts`, or `_components/` if route-local                 | `use<Thing>`                                                                                                                             | `useIsMobile`                                             |
-| Page                 | `page.tsx`                                                               | `<Noun>Page` / `<Nouns>Page`                                                                                                             | `ChatPage`, `ChatsPage`                                   |
+| Kind                 | File                                                                     | Identifier                                                                                                                                      | Example                                                   |
+| -------------------- | ------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
+| Server action        | `actions.ts`                                                             | `<useCase>Action`                                                                                                                               | `deleteChatAction`                                        |
+| Query                | `queries.ts`                                                             | `get<Noun>` / `get<Nouns>`, returns `null` when missing (`find` is the repo's word); in a module `(requester, …)`, bound to `(…)` by `index.ts` | `getChat(requester, id)` → `chats.getChat(id)`            |
+| Command              | `modules/<x>/commands.ts`                                                | the use case's name, same binding                                                                                                               | `deleteChat(requester, id)` → `chats.deleteChat(id)`      |
+| Repo helper          | `modules/<x>/repo.ts`                                                    | `find<Qualifier><Noun>`, returns a row or `null`; the executor (`db` or `tx`) comes first; never exported from `index.ts`                       | `findOwnedChat(tx, userId, id)`                           |
+| Domain rule          | `modules/<x>/domain.ts`, `policy.ts`                                     | a business verb or predicate, pure                                                                                                              | `applyCredits(chat, amount)`, `canShare(requester, chat)` |
+| Input contract (zod) | `contracts.ts`                                                           | `<useCase>Input`; inferred type `<UseCase>Input`                                                                                                | `sendMessageInput`, `SendMessageInput`                    |
+| Error class          | `errors.ts`                                                              | the fact that blocks the action                                                                                                                 | `ChatNotFound`, `Conflict`                                |
+| Component            | `components/<noun>-<role>.tsx`, or `app/.../_components/` if route-local | `<Noun><Role>`, props `<Component>Props`; client components start with `'use client'`, no suffix                                                | `ChatList`, `ChatListProps`                               |
+| Hook                 | `hooks/use-<thing>.ts`, or `_components/` if route-local                 | `use<Thing>`                                                                                                                                    | `useIsMobile`                                             |
+| Page                 | `page.tsx`                                                               | `<Noun>Page` / `<Nouns>Page`                                                                                                                    | `ChatPage`, `ChatsPage`                                   |
 
 Roles (last word of a component name): `List`, `Table`, `Card`, `Row`, `Form`, `Dialog`, `Sheet`,
 `Panel`, `Badge`, `Summary`, `Picker`, `Select`, `Filters`, `Toolbar`, `Empty`, `Provider`, or any
@@ -251,12 +303,12 @@ rename it, don't add your own components there.
 
 ### Data
 
-| Kind     | Where                                                                                   | Identifier                                | Example                      |
-| -------- | --------------------------------------------------------------------------------------- | ----------------------------------------- | ---------------------------- |
-| Table    | `lib/db/schema.ts` (exports tables only)                                                | `<nouns>Table`; SQL name plural `<nouns>` | `chatsTable` → `"chats"`     |
-| Row type | not exported; derive inline where needed                                                | `typeof <nouns>Table.$inferSelect`        |                              |
-| DTO      | `contracts.ts`; in a self-contained route without one, the `queries.ts` that returns it | `<Noun><Shape>`                           | `ChatDetail`, `ChatListItem` |
-| Mapper   | `modules/<x>/mappers.ts`, not exported                                                  | `to<TargetType>`                          | `toChatMessage(row)`         |
+| Kind     | Where                                                                                                | Identifier                                | Example                      |
+| -------- | ---------------------------------------------------------------------------------------------------- | ----------------------------------------- | ---------------------------- |
+| Table    | `lib/db/schema.ts` (exports tables only)                                                             | `<nouns>Table`; SQL name plural `<nouns>` | `chatsTable` → `"chats"`     |
+| Row type | not exported; derive inline where needed                                                             | `typeof <nouns>Table.$inferSelect`        |                              |
+| DTO      | `contracts.ts`; in a self-contained route without one, the `queries.ts` that returns it              | `<Noun><Shape>`                           | `ChatDetail`, `ChatListItem` |
+| Mapper   | `modules/<x>/mappers.ts`, imported by `queries.ts` and `commands.ts`, never exported from `index.ts` | `to<TargetType>`                          | `toChatMessage(row)`         |
 
 Inputs are zod schemas because they are untrusted; DTOs are plain types because the data layer
 builds them. UI imports DTO types, never a row type.
@@ -265,7 +317,8 @@ builds them. UI imports DTO types, never a row type.
 
 - `eslint.config.mjs`: the import graph, `server-only`, `'use server'`, casts, `process.env`, what
   a module may import from `lib/`.
-- `docs/adr/`: every decision that interprets or
-  deviates from a rule, with the options considered and how to reverse it.
+- `docs/adr/`: every deviation from a rule, and every interpretation a second module would have
+  to repeat, with the options considered and how to reverse it. An interpretation that stays local
+  is a comment at the code that names the rule.
 - `test/global-setup.ts`, `test/factories.ts`: test database and fixtures.
 - `lib/db/errors.ts`: the one place that knows the driver's error codes.
