@@ -62,8 +62,17 @@ const noDbInUi = {
     "Pages and components never import the db. Put the read in `_lib/queries.ts` or the write in `_lib/actions.ts`.",
 }
 const moduleViaIndex = {
-  group: ["@/modules/*/*"],
-  message: "Import a module only through its index.ts (`@/modules/<x>`).",
+  group: ["@/modules/*/*", "!@/modules/*/contracts"],
+  message:
+    "Import a module through its index.ts (`@/modules/<x>`); only `contracts.ts` (schemas, DTO types) may be imported directly.",
+}
+// Rule 6: callers that bring their own requester (other modules, system handlers, scripts)
+// use queries.ts/commands.ts/errors.ts directly. index.ts would bind the session; repo/mappers are internal.
+// A regex, not a glob: a glob on `@/modules/*` would also cover `@/modules/<x>/commands`.
+const noSessionBoundModule = {
+  regex: "^@/modules/[^/]+(/index|/repo|/mappers)?$",
+  message:
+    "Pass the requester you act for: import `@/modules/<x>/queries`, `/commands` or `/errors`, never index.ts (binds the session) or repo/mappers.",
 }
 const noDbInActionAdapter = {
   group: noDbInUi.group,
@@ -116,9 +125,21 @@ const eslintConfig = defineConfig([
       ],
     },
   },
+  // System route handlers (webhooks, cron) verify a secret, not a session: they call
+  // queries.ts/commands.ts with the requester they act for (Rule 6).
+  {
+    files: ["app/api/system/**"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        { patterns: [noDbInUi, noRouteLibInApi, noSessionBoundModule] },
+      ],
+    },
+  },
   // Route handlers are adapters: no db, no route `_lib`/`actions.ts`/`_components`, modules via index.ts.
   {
     files: ["app/api/**"],
+    ignores: ["app/api/system/**"],
     rules: {
       "no-restricted-imports": [
         "error",
@@ -150,7 +171,12 @@ const eslintConfig = defineConfig([
       "lib/auth/**",
       "modules/**",
     ],
-    ignores: ["lib/db/migrations/**", "lib/db/schema.ts", "**/*.test.ts"],
+    ignores: [
+      "lib/db/migrations/**",
+      "lib/db/schema.ts",
+      "modules/*/contracts.ts",
+      "**/*.test.ts",
+    ],
     plugins: { local: localPlugin },
     rules: { "local/require-server-only": "error" },
   },
@@ -209,7 +235,37 @@ const eslintConfig = defineConfig([
               group: ["@/app", "@/app/*"],
               message: "modules/ never import app/.",
             },
+            noSessionBoundModule,
           ],
+        },
+      ],
+    },
+  },
+
+  // Rule 8: no `as` casts. Mappers and lib/db may cast where the types cannot express a shape;
+  // `as const` is always allowed. components/ui is vendor code.
+  {
+    files: ["**/*.ts", "**/*.tsx"],
+    ignores: ["components/ui/**", "modules/*/mappers.ts", "lib/db/**"],
+    rules: {
+      "@typescript-eslint/consistent-type-assertions": [
+        "error",
+        { assertionStyle: "never" },
+      ],
+    },
+  },
+
+  // Rule 9: lib/env.ts (and the db client) are the only readers of process.env.
+  {
+    files: ["app/**", "modules/**", "lib/**", "components/**", "hooks/**"],
+    ignores: ["lib/env.ts", "lib/db/client.ts"],
+    rules: {
+      "no-restricted-properties": [
+        "error",
+        {
+          object: "process",
+          property: "env",
+          message: "Read configuration from `@/lib/env`.",
         },
       ],
     },

@@ -1,8 +1,8 @@
-import "server-only"
 import type { UIMessage } from "ai"
 import { z } from "zod"
 
 // Boundary types of the chats module: what goes in, and what comes out.
+// Browser-safe on purpose (Rule 6): forms validate with the same schema the action parses.
 
 // ── In: untrusted input, validated at runtime ──────────────────────────────
 
