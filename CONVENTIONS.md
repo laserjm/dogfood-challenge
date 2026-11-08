@@ -41,7 +41,7 @@ modules/<x>/              # one concept each (e.g. chats); created on a promotio
 components/               # shared UI; components/ui/* is shadcn, untouched
 lib/
 ├─ auth.ts                # getUser / requireUser (cache()), withUser
-├─ env.ts                 # validated env; the only reader of process.env (with lib/db/client.ts)
+├─ env.ts                 # validated env; the only reader of process.env
 ├─ <service>.ts           # client for an external service (AI, mail): built from env, handed to modules by adapters
 └─ db/                    # client, schema (code-first), generated migrations; errors.ts names the driver codes
 scripts/                  # seed and maintenance: system callers (optional)
@@ -81,8 +81,8 @@ db itself; a bare `actions.ts` next to `page.tsx` means a module does.
    them. _Review._
 8. **No `as` cast** outside `mappers.ts`, `lib/db/` and `as const`. If the types don't line up, fix
    the schema or add a mapper. `components/ui/*` is vendor code and exempt. _Lint._
-9. **`lib/env.ts` is the only reader of `process.env`** (with `lib/db/client.ts`). Everything else
-   reads `env.X`, so a missing variable fails the build, not a request. _Lint._
+9. **`lib/env.ts` is the only reader of `process.env`.** Everything else, the db client included,
+   reads `env.X`, so a missing variable fails at startup, not in a request. _Lint._
 10. **The schema is code-first and the database holds no logic.** `lib/db/schema.ts` is the source
     of truth, migrations are generated and never hand-edited, and there are no database functions
     and no triggers except `updated_at`. _Review._
