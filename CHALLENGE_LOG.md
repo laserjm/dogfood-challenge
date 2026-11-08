@@ -112,6 +112,55 @@ When a module exists: `app/` imports only its `index.ts`, the module never impor
 - The full "who may import what" table. Rules 2 and 4 cover it.
 - `index.ts` as a public API boundary before `modules/` exists.
 
+### Testing
+
+Three levels. Which ones apply depends on the route's state:
+
+| Level      | Before promotion (`_lib/`)                                                                                                  | After promotion (`modules/<x>/`)                            |
+| ---------- | --------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
+| API tests  | none: `_lib` functions call `requireUser()` and `next/cache`, so a test needs the framework. Wanting one is soft trigger 6. | every use case (`queries.ts`, `commands.ts`), real Postgres |
+| Unit tests | only **business-critical** pure functions (e.g. `policy.ts`), no db                                                         | same                                                        |
+| UI tests   | only **business-critical** workflows, through the running app (E2E)                                                         | same                                                        |
+
+> **TODO:** define how to justify "business critical". What makes a unit or a workflow worth a
+> unit or UI test, who decides, and where the justification is written down.
+
+**API tests on module level (after promotion).** A module's API is its use cases: the functions in
+`queries.ts` and `commands.ts`. Tests call them directly with an explicit `requester`, the way
+`index.ts` does after `withUser` ([ADR 0001](docs/adr/0001-where-the-current-user-is-resolved.md)).
+That is the payoff of keeping modules free of `next/*` and request context: no framework, no
+mocks of `requireUser`. `index.ts` (a one-line binding), `repo.ts` and `mappers.ts` are not
+tested on their own; they are covered through the use cases. Adapters in `app/` are covered
+only by UI tests, and only where the workflow is business critical.
+
+1. **Colocated:** `modules/<x>/queries.test.ts` and `modules/<x>/commands.test.ts`, one
+   `describe("<useCase>")` per function, `it("<behavior in plain words>")`.
+2. **Real Postgres, no db mocks.** The ownership check is a `WHERE` clause; a mock would only
+   test the mock. Tests run against `dogfood_test` (`TEST_DATABASE_URL` overrides it).
+   `test/global-setup.ts` migrates it and truncates all tables once per run, and refuses to
+   start unless the database name ends with `_test`.
+3. **Every test creates its own users.** No shared fixtures, no relying on rows from another
+   test. Fresh users isolate tests through the same ownership rule the app uses, so test files
+   can run in parallel without cleanup between tests.
+4. **Arrange with factories, assert through the API.** `test/factories.ts` sets up state with
+   raw inserts, so a query test doesn't depend on a command. Assertions use return values,
+   thrown domain errors, and the module's own queries. Read a table directly only when the API
+   can't observe the behavior, and say why in a comment.
+5. **Rule 1 gets a test.** Every use case that takes an id has a "someone else's id" case
+   (returns `null` / throws `ChatNotFound`, and changes nothing) next to its happy path, plus a
+   malformed-id case. This turns the ownership review rule into a checked one.
+6. **A test that needs Next means the logic is in the wrong layer.** Move it into the module
+   instead of mocking `next/*`.
+7. **Unit and UI tests are opt-in.** Write one only for a business-critical unit or workflow,
+   and, after promotion, only when the API tests can't cover it. A unit that is already
+   exercised through a use case doesn't get its own test.
+
+```bash
+docker compose exec postgres createdb -U dogfood dogfood_test   # once
+pnpm test          # single run
+pnpm test:watch    # watch mode
+```
+
 ### Naming
 
 #### UI and use-case layer (`app/`, `components/`, `hooks/`, `_lib/`, `modules/<x>/`)

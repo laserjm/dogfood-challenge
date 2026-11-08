@@ -1,44 +1,58 @@
-import { defineConfig, globalIgnores } from "eslint/config";
-import nextVitals from "eslint-config-next/core-web-vitals";
-import nextTs from "eslint-config-next/typescript";
+import { defineConfig, globalIgnores } from "eslint/config"
+import nextVitals from "eslint-config-next/core-web-vitals"
+import nextTs from "eslint-config-next/typescript"
 
 // Local rule: file must start with `import 'server-only'`.
 // Used for files that touch the db or auth so they can never end up in a client bundle.
 const requireServerOnly = {
-  meta: { type: "problem", messages: { missing: "File must begin with `import 'server-only'`." } },
+  meta: {
+    type: "problem",
+    messages: { missing: "File must begin with `import 'server-only'`." },
+  },
   create(context) {
     return {
       Program(node) {
         // Skip leading directives such as "use server".
-        const first = node.body.find((n) => !(n.type === "ExpressionStatement" && n.directive));
+        const first = node.body.find(
+          (n) => !(n.type === "ExpressionStatement" && n.directive)
+        )
         const ok =
-          first?.type === "ImportDeclaration" && first.source.value === "server-only";
-        if (!ok) context.report({ node: first ?? node, messageId: "missing" });
+          first?.type === "ImportDeclaration" &&
+          first.source.value === "server-only"
+        if (!ok) context.report({ node: first ?? node, messageId: "missing" })
       },
-    };
+    }
   },
-};
+}
 
 // Local rule: file must start with the `'use server'` directive.
 // Without it, `actions.ts` exports plain functions and forms can't call them.
 const requireUseServer = {
-  meta: { type: "problem", messages: { missing: "File must begin with `'use server'`." } },
+  meta: {
+    type: "problem",
+    messages: { missing: "File must begin with `'use server'`." },
+  },
   create(context) {
     return {
       Program(node) {
-        const first = node.body[0];
-        const ok = first?.type === "ExpressionStatement" && first.directive === "use server";
-        if (!ok) context.report({ node: first ?? node, messageId: "missing" });
+        const first = node.body[0]
+        const ok =
+          first?.type === "ExpressionStatement" &&
+          first.directive === "use server"
+        if (!ok) context.report({ node: first ?? node, messageId: "missing" })
       },
-    };
+    }
   },
-};
+}
 
 // One plugin object for both inline rules: flat config refuses to redefine a plugin
 // name with a different object.
 const localPlugin = {
-  rules: { "require-server-only": requireServerOnly, "require-use-server": requireUseServer },
-};
+  rules: {
+    "require-server-only": requireServerOnly,
+    "require-use-server": requireUseServer,
+  },
+}
 
 // Import patterns, named once. Each file must match exactly one block that sets
 // `no-restricted-imports`: in flat config a later block replaces the options, it does not merge.
@@ -46,26 +60,33 @@ const noDbInUi = {
   group: ["@/lib/db", "@/lib/db/*", "**/lib/db", "**/lib/db/*"],
   message:
     "Pages and components never import the db. Put the read in `_lib/queries.ts` or the write in `_lib/actions.ts`.",
-};
+}
 const moduleViaIndex = {
   group: ["@/modules/*/*"],
   message: "Import a module only through its index.ts (`@/modules/<x>`).",
-};
+}
 const noDbInActionAdapter = {
   group: noDbInUi.group,
   message:
     "A route-level `actions.ts` is a module adapter: call `@/modules/<x>`, never the db. Db-backed actions live in `_lib/actions.ts`.",
-};
+}
 const noComponentsInLib = {
   group: ["**/_components", "**/_components/*"],
   message:
     "`_lib` and `actions.ts` never import `_components`. Types the UI needs come from the query or module that returns them.",
-};
+}
 const noRouteLibInApi = {
-  group: ["**/_lib", "**/_lib/*", "**/actions", "**/actions.ts", "**/_components", "**/_components/*"],
+  group: [
+    "**/_lib",
+    "**/_lib/*",
+    "**/actions",
+    "**/actions.ts",
+    "**/_components",
+    "**/_components/*",
+  ],
   message:
     "Route handlers never import a route's `_lib`, `actions.ts` or `_components`. Shared logic lives in `@/modules/<x>`.",
-};
+}
 
 const eslintConfig = defineConfig([
   ...nextVitals,
@@ -77,7 +98,10 @@ const eslintConfig = defineConfig([
   {
     files: ["app/**/_lib/**"],
     rules: {
-      "no-restricted-imports": ["error", { patterns: [moduleViaIndex, noComponentsInLib] }],
+      "no-restricted-imports": [
+        "error",
+        { patterns: [moduleViaIndex, noComponentsInLib] },
+      ],
     },
   },
   // After promotion, `_lib/` is gone and the route's `actions.ts` sits next to `page.tsx`.
@@ -86,14 +110,20 @@ const eslintConfig = defineConfig([
     files: ["app/**/actions.ts"],
     ignores: ["app/**/_lib/**", "app/api/**"],
     rules: {
-      "no-restricted-imports": ["error", { patterns: [noDbInActionAdapter, moduleViaIndex, noComponentsInLib] }],
+      "no-restricted-imports": [
+        "error",
+        { patterns: [noDbInActionAdapter, moduleViaIndex, noComponentsInLib] },
+      ],
     },
   },
   // Route handlers are adapters: no db, no route `_lib`/`actions.ts`/`_components`, modules via index.ts.
   {
     files: ["app/api/**"],
     rules: {
-      "no-restricted-imports": ["error", { patterns: [noDbInUi, noRouteLibInApi, moduleViaIndex] }],
+      "no-restricted-imports": [
+        "error",
+        { patterns: [noDbInUi, noRouteLibInApi, moduleViaIndex] },
+      ],
     },
   },
   // UI code (pages, components, hooks): no db, and modules only through their index.ts.
@@ -101,7 +131,10 @@ const eslintConfig = defineConfig([
     files: ["app/**", "components/**", "hooks/**"],
     ignores: ["app/**/_lib/**", "app/api/**", "app/**/actions.ts"],
     rules: {
-      "no-restricted-imports": ["error", { patterns: [noDbInUi, moduleViaIndex] }],
+      "no-restricted-imports": [
+        "error",
+        { patterns: [noDbInUi, moduleViaIndex] },
+      ],
     },
   },
 
@@ -117,7 +150,7 @@ const eslintConfig = defineConfig([
       "lib/auth/**",
       "modules/**",
     ],
-    ignores: ["lib/db/migrations/**", "lib/db/schema.ts"],
+    ignores: ["lib/db/migrations/**", "lib/db/schema.ts", "**/*.test.ts"],
     plugins: { local: localPlugin },
     rules: { "local/require-server-only": "error" },
   },
@@ -138,8 +171,14 @@ const eslintConfig = defineConfig([
         "error",
         {
           patterns: [
-            { group: ["@/app", "@/app/*", "../app", "../app/*", "../../app/*"], message: "lib/ never imports app/." },
-            { group: ["@/modules", "@/modules/*", "../modules/*"], message: "lib/ never imports modules/." },
+            {
+              group: ["@/app", "@/app/*", "../app", "../app/*", "../../app/*"],
+              message: "lib/ never imports app/.",
+            },
+            {
+              group: ["@/modules", "@/modules/*", "../modules/*"],
+              message: "lib/ never imports modules/.",
+            },
           ],
         },
       ],
@@ -153,10 +192,23 @@ const eslintConfig = defineConfig([
       "no-restricted-imports": [
         "error",
         {
-          paths: [{ name: "next", message: "modules/ never import next/*. Keep redirect/revalidate in the route's actions.ts." }],
+          paths: [
+            {
+              name: "next",
+              message:
+                "modules/ never import next/*. Keep redirect/revalidate in the route's actions.ts.",
+            },
+          ],
           patterns: [
-            { group: ["next/*"], message: "modules/ never import next/*. Keep redirect/revalidate in the route's actions.ts." },
-            { group: ["@/app", "@/app/*"], message: "modules/ never import app/." },
+            {
+              group: ["next/*"],
+              message:
+                "modules/ never import next/*. Keep redirect/revalidate in the route's actions.ts.",
+            },
+            {
+              group: ["@/app", "@/app/*"],
+              message: "modules/ never import app/.",
+            },
           ],
         },
       ],
@@ -176,13 +228,14 @@ const eslintConfig = defineConfig([
             {
               group: ["@/lib/auth", "@/lib/auth/*"],
               allowTypeImports: true,
-              message: "Only a module's index.ts binds the user (withUser). Take `requester` and use `import type`.",
+              message:
+                "Only a module's index.ts binds the user (withUser). Take `requester` and use `import type`.",
             },
           ],
         },
       ],
     },
   },
-]);
+])
 
-export default eslintConfig;
+export default eslintConfig
