@@ -1,7 +1,18 @@
 # Conventions
 
-How code is organized, and when a route grows into a module. Rules that lint enforces are only
-pointed at here; `eslint.config.mjs` is the source of truth for the import graph.
+How a Next.js app on Drizzle, Postgres and zod is organized, and when a route grows into a
+module. Rules that lint enforces are only pointed at here; the project's `eslint.config.mjs` is the source of truth for the import graph.
+
+## Why
+
+These rules optimize for four things, in this order. When two rules conflict, the earlier
+principle wins.
+
+1. **Business logic lives in TypeScript**, not in database functions, not in React components.
+2. **End-to-end type safety**: one source of truth for each shape, inferred everywhere else.
+3. **Developer experience**: a feature's code sits together; you can find it in one folder.
+4. **Just enough layering**: layers exist to control dependency direction and make logic
+   testable. Where there are no rules, there is no domain layer.
 
 ## Layout
 
@@ -31,7 +42,7 @@ components/               # shared UI; components/ui/* is shadcn, untouched
 lib/
 ├─ auth.ts                # getUser / requireUser (cache()), withUser
 ├─ env.ts                 # validated env; the only reader of process.env (with lib/db/client.ts)
-└─ db/                    # client, schema (code-first), generated migrations
+└─ db/                    # client, schema (code-first), generated migrations; errors.ts names the driver codes
 scripts/                  # seed and maintenance: system callers (optional)
 ```
 
@@ -42,8 +53,7 @@ db itself; a bare `actions.ts` next to `page.tsx` means a module does.
 
 1. **The current user is resolved in exactly one place.** Self-contained route: first line of every
    `_lib` function. Module: `index.ts` wraps every export in `withUser`; internals take `requester`.
-   Adapters never pass a user ([ADR 0001](docs/adr/0001-where-the-current-user-is-resolved.md)).
-   _Lint for modules, review for `_lib`._
+   Adapters never pass a user. _Lint for modules, review for `_lib`._
 2. **Every read filters by the caller, every write is scoped by the caller**
    (`eq(table.userId, requester.id)`). The ownership check is the policy. _Review, plus Testing §5._
 3. **Only `_lib/*`, `modules/*` and `lib/` import the db.** _Lint._
@@ -61,6 +71,8 @@ db itself; a bare `actions.ts` next to `page.tsx` means a module does.
      which would bind the session; never `repo.ts` or `mappers.ts`.
    - UI, client components included, imports `contracts.ts` for input schemas and DTO types, so a
      form validates with the same schema the action parses.
+     `contracts.ts` itself imports nothing but zod and types, so it can't drag the server into the
+     bundle.
 
    _Lint._
 
@@ -117,6 +129,9 @@ the UI sees an error class.
 - One answer for missing, foreign and malformed ids, so ownership isn't leaked. Until `policy.ts`
   exists, "not owned" is "not found" by design; `Forbidden` arrives with hard trigger 4.
 - `{ error }` holds copy the user can read (`useActionState`), never a class name or a tag.
+- The driver's error codes are recognized in one place, `lib/db/errors.ts` (`23505` unique,
+  `23503` foreign key). A command catches there and throws `Conflict`; nothing else reads a driver
+  error.
 - Error classes live in `modules/<x>/errors.ts`. A self-contained route has no adapter layer to
   map them, so it calls `notFound()` or returns `{ error }` directly; wanting named errors there is
   soft trigger 8.
@@ -194,7 +209,7 @@ triggers: "it might be reused later", many small actions in one file, a cleaner 
    in the module.
 
 ```bash
-docker compose exec postgres createdb -U dogfood dogfood_test   # once
+createdb <app>_test   # once, on the local Postgres
 pnpm test
 ```
 
@@ -239,8 +254,9 @@ builds them. UI imports DTO types, never a row type.
 
 ## Sources of truth
 
-- `eslint.config.mjs`: the import graph, `server-only`, `'use server'`, casts, `process.env`.
-- `docs/adr/`: every decision that interprets or deviates from a rule.
-  [ADR 0001](docs/adr/0001-where-the-current-user-is-resolved.md): why the user is bound in
-  `index.ts`, and how to switch to module-level `requireUser()` if that turns out to be ceremony.
+- `eslint.config.mjs`: the import graph, `server-only`,
+  `'use server'`, casts, `process.env`.
+- `docs/adr/`: every decision that interprets or
+  deviates from a rule, with the options considered and how to reverse it.
 - `test/global-setup.ts`, `test/factories.ts`: test database and fixtures.
+- `lib/db/errors.ts`: the one place that knows the driver's error codes.

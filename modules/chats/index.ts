@@ -16,6 +16,7 @@ export const sendMessage = withUser(commands.sendMessage)
 export { sendMessageInput } from "./contracts"
 export type {
   ChatDetail,
+  ChatErrorResponse,
   ChatListItem,
   ChatMessage,
   SendMessageInput,

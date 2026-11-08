@@ -1,11 +1,6 @@
 import "server-only"
-// import "dotenv/config"
-import { config } from "dotenv"
 import { drizzle } from "drizzle-orm/node-postgres"
+import { databaseEnv } from "../env"
 
-config({
-  path: ".env.local",
-})
-
-if (!process.env.DATABASE_URL) throw Error("no database url")
-export const db = drizzle(process.env.DATABASE_URL!)
+// Next loads .env.local itself; vitest sets DATABASE_URL in its config.
+export const db = drizzle(databaseEnv().DATABASE_URL)

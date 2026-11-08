@@ -1,10 +1,9 @@
 import { config } from "dotenv"
 import { drizzle } from "drizzle-orm/node-postgres"
 import { eq, inArray } from "drizzle-orm"
-import { chatsTable, messagesTable, usersTable } from "./lib/db/schema"
+import { chatsTable, messagesTable, usersTable } from "../lib/db/schema"
 
 config({ path: ".env.local" })
-
 const db = drizzle(process.env.DATABASE_URL!)
 
 const SEED_EMAIL = "john@example.com"

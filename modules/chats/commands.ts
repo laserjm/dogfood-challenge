@@ -40,11 +40,18 @@ export async function deleteChat(requester: SessionUser, chatId: string) {
 // The whole reply: store the user message, answer from the stored history,
 // store the reply when the stream ends. `requester` is captured for the
 // stream's lifetime, so nothing resolves the user after the response started.
-// The adapter passes the model; the module never reads env.
+// The adapter passes the model and the error copy; the module never reads env
+// and never decides what a user is told.
+export type SendMessageOptions = {
+  model: LanguageModel
+  // Text for the error chunk the client receives once streaming has started.
+  describeError: (error: unknown) => string
+}
+
 export async function sendMessage(
   requester: SessionUser,
   input: SendMessageInput,
-  model: LanguageModel
+  { model, describeError }: SendMessageOptions
 ) {
   await saveUserMessage(requester, input) // ownership check; throws ChatNotFound
 
@@ -64,6 +71,7 @@ export async function sendMessage(
   return toUIMessageStream({
     stream: result.stream,
     originalMessages: chat.messages,
+    onError: describeError,
     generateMessageId: () => crypto.randomUUID(),
     onEnd: async ({ responseMessage, outcome }) => {
       // The response is already streaming: errors can't reach the client

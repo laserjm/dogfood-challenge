@@ -136,6 +136,13 @@ const eslintConfig = defineConfig([
       ],
     },
   },
+  // Scripts (seed, maintenance) are system callers too (Rule 6, second door).
+  {
+    files: ["scripts/**"],
+    rules: {
+      "no-restricted-imports": ["error", { patterns: [noSessionBoundModule] }],
+    },
+  },
   // Route handlers are adapters: no db, no route `_lib`/`actions.ts`/`_components`, modules via index.ts.
   {
     files: ["app/api/**"],
@@ -255,10 +262,10 @@ const eslintConfig = defineConfig([
     },
   },
 
-  // Rule 9: lib/env.ts (and the db client) are the only readers of process.env.
+  // Rule 9: lib/env.ts is the only reader of process.env.
   {
     files: ["app/**", "modules/**", "lib/**", "components/**", "hooks/**"],
-    ignores: ["lib/env.ts", "lib/db/client.ts"],
+    ignores: ["lib/env.ts"],
     rules: {
       "no-restricted-properties": [
         "error",
@@ -271,7 +278,7 @@ const eslintConfig = defineConfig([
     },
   },
 
-  // ADR 0001: only a module's index.ts binds the current user (`withUser`).
+  // CONVENTIONS.md Rule 1: only a module's index.ts binds the current user (`withUser`).
   // Everything else in a module takes `requester` and may import auth types only.
   {
     files: ["modules/**"],
@@ -286,6 +293,37 @@ const eslintConfig = defineConfig([
               allowTypeImports: true,
               message:
                 "Only a module's index.ts binds the user (withUser). Take `requester` and use `import type`.",
+            },
+          ],
+        },
+      ],
+    },
+  },
+
+  // Rule 6, third door: contracts.ts reaches the browser, so it imports only zod and types.
+  // This block replaces the auth-type block above for contracts.ts (flat config does not merge
+  // options); `@/*` covers `@/lib/auth` as well.
+  {
+    files: ["modules/*/contracts.ts"],
+    rules: {
+      "@typescript-eslint/no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: [
+                "@/*",
+                "./*",
+                "../*",
+                "server-only",
+                "next",
+                "next/*",
+                "drizzle-orm",
+                "drizzle-orm/*",
+              ],
+              allowTypeImports: true,
+              message:
+                "contracts.ts is browser-safe: import only zod and types.",
             },
           ],
         },

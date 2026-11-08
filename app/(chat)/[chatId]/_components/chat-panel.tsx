@@ -1,7 +1,7 @@
 "use client"
 
 import Spinner from "@/components/spinner"
-import type { ChatMessage } from "@/modules/chats"
+import { chatErrorResponse, type ChatMessage } from "@/modules/chats/contracts"
 import { useChat } from "@ai-sdk/react"
 import { DefaultChatTransport } from "ai"
 import { useState } from "react"
@@ -12,7 +12,7 @@ export type ChatPanelProps = {
 }
 
 export function ChatPanel({ chatId, initialMessages }: ChatPanelProps) {
-  const { messages, sendMessage, status, stop } = useChat({
+  const { messages, sendMessage, regenerate, status, stop, error } = useChat({
     id: chatId,
     messages: initialMessages,
     generateId: () => crypto.randomUUID(),
@@ -23,17 +23,13 @@ export function ChatPanel({ chatId, initialMessages }: ChatPanelProps) {
         body: { chatId: id, message: messages.at(-1) },
       }),
     }),
-    onFinish: ({ message, messages, isError }) => {
-      console.log(
-        "[client] completed response",
-        JSON.stringify({ message, messages, isError }, null, 2)
-      )
-    },
     onError: (error) => {
       console.error("[client] chat error", error)
     },
   })
   const [input, setInput] = useState("")
+  // "error" is not busy: the user must be able to retry or type again.
+  const busy = status === "submitted" || status === "streaming"
 
   return (
     <>
@@ -46,11 +42,22 @@ export function ChatPanel({ chatId, initialMessages }: ChatPanelProps) {
         </div>
       ))}
 
-      {(status === "submitted" || status === "streaming") && (
+      {busy && (
         <div>
           {status === "submitted" && <Spinner />}
           <button type="button" onClick={() => stop()}>
             Stop
+          </button>
+        </div>
+      )}
+
+      {error && (
+        <div role="alert">
+          <p>{readableError(error)}</p>
+          {/* Resends the last user message with the same id: the server
+              stores it once (onConflictDoNothing), so no duplicate. */}
+          <button type="button" onClick={() => regenerate()}>
+            Try again
           </button>
         </div>
       )}
@@ -67,13 +74,28 @@ export function ChatPanel({ chatId, initialMessages }: ChatPanelProps) {
         <input
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          disabled={status !== "ready"}
+          disabled={busy}
           placeholder="Say something..."
         />
-        <button type="submit" disabled={status !== "ready"}>
+        <button type="submit" disabled={busy}>
           Submit
         </button>
       </form>
     </>
   )
+}
+
+const FALLBACK = "Something went wrong. Try again in a moment."
+
+// Two shapes arrive here:
+// - HTTP error before the stream: `message` is the raw body, our `{ error }` JSON;
+// - error chunk during the stream: `message` is already describeAiError's copy.
+function readableError(error: Error): string {
+  try {
+    const body = chatErrorResponse.safeParse(JSON.parse(error.message))
+    if (body.success) return body.data.error
+  } catch {
+    // Not JSON: an in-stream message, or a body we didn't write.
+  }
+  return error.message.startsWith("<") ? FALLBACK : error.message || FALLBACK
 }
