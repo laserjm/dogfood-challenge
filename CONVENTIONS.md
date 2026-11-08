@@ -134,12 +134,10 @@ the UI sees an error class.
 - One answer for missing, foreign and malformed ids, so ownership isn't leaked. Until `policy.ts`
   exists, "not owned" is "not found" by design; `Forbidden` arrives with hard trigger 4.
 - `{ error }` holds copy the user can read (`useActionState`), never a class name or a tag.
-- A route handler answers JSON on every status, `404` and `500` included: `notFound()` would
-  render the HTML page. The body is `{ error: string }` everywhere, typed once in `lib/http.ts`,
-  never per module.
+- A route handler answers JSON `{ error }` on every status, `404` and `500` included: `notFound()`
+  would render the HTML page.
 - When a module must produce user-facing text itself, as in an error chunk after a stream has
-  started, the adapter hands it in as a function. A module never holds copy: `lib/` clients
-  classify errors, adapters word them.
+  started, the adapter hands it in as a function. A module never holds copy.
 - The driver's error codes are recognized in one place, `lib/db/errors.ts` (`23505` unique,
   `23503` foreign key). A command catches there and throws `Conflict`; nothing else reads a driver
   error.
