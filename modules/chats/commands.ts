@@ -3,10 +3,10 @@ import { and, eq } from "drizzle-orm"
 import type { SessionUser } from "@/lib/auth"
 import { db } from "@/lib/db/client"
 import { chatsTable, messagesTable } from "@/lib/db/schema"
-import type { SendMessageInput } from "./contracts"
+import { chatIdInput } from "./contracts"
+import type { ChatMessage, SendMessageInput } from "./contracts"
 import { ChatNotFound } from "./errors"
 import { toMessageRow } from "./mappers"
-import type { ChatMessage } from "./queries"
 import { findOwnedChat, nextPosition } from "./repo"
 
 export async function createChat(requester: SessionUser) {
@@ -17,7 +17,10 @@ export async function createChat(requester: SessionUser) {
   return chat
 }
 
+// A malformed id is treated like a missing one.
 export async function deleteChat(requester: SessionUser, chatId: string) {
+  if (!chatIdInput.safeParse(chatId).success) throw new ChatNotFound(chatId)
+
   await db.transaction(async (tx) => {
     const chat = await findOwnedChat(tx, requester.id, chatId)
     if (!chat) throw new ChatNotFound(chatId)

@@ -1,6 +1,6 @@
 import "server-only"
 import type { messagesTable } from "@/lib/db/schema"
-import type { ChatMessage } from "./queries"
+import type { ChatMessage } from "./contracts"
 
 type MessageRow = typeof messagesTable.$inferSelect
 type NewMessageRow = typeof messagesTable.$inferInsert

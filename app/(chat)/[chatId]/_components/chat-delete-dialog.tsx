@@ -1,7 +1,7 @@
 "use client"
 
 import { useFormStatus } from "react-dom"
-import { deleteChatAction } from "@/app/(chat)/_lib/actions"
+import { deleteChatAction } from "@/app/(chat)/actions"
 import {
   AlertDialog,
   AlertDialogAction,

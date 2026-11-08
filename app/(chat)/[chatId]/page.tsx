@@ -1,14 +1,14 @@
-import { getChat } from "@/app/(chat)/_lib/queries"
 import { Bubble, BubbleContent } from "@/components/ui/bubble"
 import { Message, MessageContent, MessageGroup } from "@/components/ui/message"
 import { notFound } from "next/navigation"
 import { Streamdown } from "streamdown"
 import { ChatDeleteDialog } from "./_components/chat-delete-dialog"
 import { ChatPanel } from "./_components/chat-panel"
+import * as chats from "@/modules/chats"
 
 export default async function ChatPage(props: PageProps<"/[chatId]">) {
   const { chatId } = await props.params
-  const chat = await getChat(chatId)
+  const chat = await chats.getChat(chatId)
   if (!chat) notFound()
 
   console.dir({ databaseMessages: chat.messages }, { depth: null })

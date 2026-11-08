@@ -1,5 +1,4 @@
 import "server-only"
-import { requireUser } from "@/lib/auth"
 import { env } from "@/lib/env"
 import * as chats from "@/modules/chats"
 import {
@@ -13,10 +12,9 @@ import { notFound } from "next/navigation"
 // Allow streaming responses up to 30 seconds
 export const maxDuration = 30
 
-// Adapter: requireUser() → parse → module command → stream → module command.
+// Adapter: parse → module command → stream → module command.
+// The module binds the current user (ADR 0001).
 export async function POST(req: Request) {
-  const user = await requireUser()
-
   const parsed = chats.sendMessageInput.safeParse(
     await req.json().catch(() => null)
   )
@@ -28,14 +26,14 @@ export async function POST(req: Request) {
   // The ownership check runs here, before streaming starts: this is the last
   // point where a 404 can still reach the client.
   try {
-    await chats.saveUserMessage(user, parsed.data)
+    await chats.saveUserMessage(parsed.data)
   } catch (error) {
     if (error instanceof chats.ChatNotFound) notFound()
     throw error
   }
 
   // History comes from the db, not from the client.
-  const chat = await chats.getChat(user, chatId)
+  const chat = await chats.getChat(chatId)
   if (!chat) notFound()
 
   const result = streamText({
@@ -59,8 +57,10 @@ export async function POST(req: Request) {
 
         // The response is already streaming: errors can't reach the client
         // any more, so log them instead of throwing.
+        // Note: this resolves the current user after the response started.
+        // Fine for the db-backed user; re-check once a session reads cookies().
         try {
-          await chats.saveAssistantMessage(user, {
+          await chats.saveAssistantMessage({
             chatId,
             message: responseMessage,
           })
