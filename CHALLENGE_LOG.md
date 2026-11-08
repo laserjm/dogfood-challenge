@@ -4,7 +4,7 @@ Here is what i started with:
 
 - reads are located in a queries.ts
 - deletes or writes are located in an actions.ts
-- usually i want to locate queries, actions and ui components as close as possible. This is an open to.
+- usually i want to locate queries, actions and ui components as close as possible. This is an open topic.
 - db is under cross cutting (lib)
 - auth is under cross cutting (lib)
 
@@ -45,7 +45,7 @@ The folder tells you which state a route is in: `_lib/` means the route talks to
 
 ### Hard rules (always)
 
-1. **The current user is resolved in exactly one place.** In a module: `index.ts` wraps every public function with `withUser`; internal functions take `requester`. Without a module: every `_lib` query and action calls `requireUser()` on its first line. Adapters never pass a user ([ADR 0001](docs/adr/0001-where-the-current-user-is-resolved.md)). Reads filter by the caller (`eq(table.userId, user.id)`), writes scope by the caller. The ownership check is the policy.
+1. **The current user is resolved in exactly one place.** Before promotion: every `_lib` query and action calls `requireUser()` on its first line. After promotion to `modules/<x>/`: the module's `index.ts` wraps every public function with `withUser`, and internal functions take `requester`. In both states, adapters never pass a user ([ADR 0001](docs/adr/0001-where-the-current-user-is-resolved.md)). Reads filter by the caller (`eq(table.userId, user.id)`), writes scope by the caller. The ownership check is the policy.
 2. **Only `_lib/*`, `modules/*` and `lib/` import the db.** Pages, components and route handlers never do.
 3. **`import 'server-only'`** at the top of every `_lib` file, every `actions.ts`, every `modules/` file, every route handler (`app/api/**`), `lib/auth` and `lib/db/client.ts`. In `actions.ts`, `'use server'` comes first, then `import 'server-only'` (both are allowed per the Next 16 data-security guide). Not `schema.ts`: drizzle-kit and `seed.ts` load it outside Next.
 4. **`lib/` never imports `app/`.**
@@ -53,9 +53,10 @@ The folder tells you which state a route is in: `_lib/` means the route talks to
 
 Rules 2, 3, 4 and the module import rules are enforced in `eslint.config.mjs` with core `no-restricted-imports` plus two small inline rules: `require-server-only`, and `require-use-server` for every `app/**/actions.ts`. Also enforced there: `_lib` and `actions.ts` never import `_components`, a route-level `actions.ts` never imports the db, and route handlers never import a route's `_lib`, `actions.ts` or `_components` (a server action is not an API for other adapters). The globs match by file role (`actions.ts`), not by folder, so moving a file doesn't silently drop its checks. Inside a module, only `index.ts` may import `@/lib/auth` as a value (everything else uses `import type`). Rules 1 and 5 are review rules: ESLint can't see whether a query filters by the caller or whether a component made a permission decision.
 
-**Data in components.** A server component in `_components/` may await a function from
-`_lib/queries.ts` when it owns that data (e.g. the sidebar's chat list), wrapped in
-`<Suspense>` next to it. Client components get data as props or as a promise (`use`).
+**Data in components.** A server component in `_components/` may await a query when it owns
+that data (e.g. the sidebar's chat list), wrapped in `<Suspense>` next to it: from
+`_lib/queries.ts` before promotion, or from `modules/<x>/queries.ts` after (imported through
+the module's `index.ts`). Client components get data as props or as a promise (`use`).
 Neither imports the db (Rule 2), and neither decides permissions (Rule 5).
 Source: Next 16 docs, "Fetching data" (fetch where it's needed, Suspense close to the data).
 
@@ -113,23 +114,23 @@ When a module exists: `app/` imports only its `index.ts`, the module never impor
 
 ### Naming
 
-#### UI layer (`actions.ts`, `queries.ts`, `components/`, `app/`)
+#### UI and use-case layer (`app/`, `components/`, `hooks/`, `_lib/`, `modules/<x>/`)
 
-| Kind                     | File                                                      | Identifier                                                        | Example                       |
-| ------------------------ | --------------------------------------------------------- | ----------------------------------------------------------------- | ----------------------------- |
-| Server action            | `actions.ts`                                              | `<useCase>Action`                                                 | `payOrderAction`              |
-| Query                    | `queries.ts`                                              | `<verb><Noun>`                                                    | `getOrder(id)`                |
-| Command (wired use case) | `modules/<x>/commands.ts`, exported via `index.ts`        | the use case's name, `(requester, input)`                         | `payOrder(requester, input)`  |
-| Auth binder              | `lib/auth.ts`                                             | `with<Context>`                                                   | `withUser(fn)`                |
-| Input contract (zod)     | `contracts.ts`                                            | `<useCase>Input`; inferred type `<UseCase>Input`                  | `sendMessageInput`            |
-| Cache tags               | `queries.ts`                                              | `<NOUN>_TAGS = { all: '<nouns>', one: (id) => \`<noun>:${id}\` }` | `ORDER_TAGS`                  |
-| Revalidation helper      | `actions.ts`, exported via `index.ts`                     | `revalidate<Noun>(id)`                                            | `revalidateOrder`             |
-| Component                | `components/<noun>-<role>.tsx`                            | `<Noun><Role>`, props `<Component>Props`                          | `OrderCard`, `OrderCardProps` |
-| Client component         | same; file starts with `'use client'`; no `Client` suffix |                                                                   |                               |
-| Hook (shared)            | `hooks/use-<thing>.ts`                                    | `use<Thing>`                                                      | `useIsMobile`                 |
-| Hook (route-local)       | `app/.../_components/use-<thing>.ts`                      | `use<Thing>`                                                      | `useOrderForm`                |
-| Route-local component    | `app/.../_components/<noun>-<role>.tsx`                   | same                                                              |                               |
-| Page component           | `page.tsx`                                                | `<Noun>Page` / `<Nouns>Page`                                      | `OrdersPage`                  |
+| Kind                     | File                                                            | Identifier                                                        | Example                       |
+| ------------------------ | --------------------------------------------------------------- | ----------------------------------------------------------------- | ----------------------------- |
+| Server action            | `actions.ts`                                                    | `<useCase>Action`                                                 | `payOrderAction`              |
+| Query                    | `queries.ts`                                                    | `<verb><Noun>`                                                    | `getOrder(id)`                |
+| Command (wired use case) | `modules/<x>/commands.ts`, exported via `index.ts`              | the use case's name, `(requester, input)`                         | `payOrder(requester, input)`  |
+| Auth binder              | `lib/auth.ts`                                                   | `with<Context>`                                                   | `withUser(fn)`                |
+| Input contract (zod)     | `contracts.ts`                                                  | `<useCase>Input`; inferred type `<UseCase>Input`                  | `sendMessageInput`            |
+| Cache tags               | `queries.ts`                                                    | `<NOUN>_TAGS = { all: '<nouns>', one: (id) => \`<noun>:${id}\` }` | `ORDER_TAGS`                  |
+| Revalidation helper      | the route's `actions.ts` (never a module: it uses `next/cache`) | `revalidate<Noun>(id)`                                            | `revalidateOrder`             |
+| Component                | `components/<noun>-<role>.tsx`                                  | `<Noun><Role>`, props `<Component>Props`                          | `OrderCard`, `OrderCardProps` |
+| Client component         | same; file starts with `'use client'`; no `Client` suffix       |                                                                   |                               |
+| Hook (shared)            | `hooks/use-<thing>.ts`                                          | `use<Thing>`                                                      | `useIsMobile`                 |
+| Hook (route-local)       | `app/.../_components/use-<thing>.ts`                            | `use<Thing>`                                                      | `useOrderForm`                |
+| Route-local component    | `app/.../_components/<noun>-<role>.tsx`                         | same                                                              |                               |
+| Page component           | `page.tsx`                                                      | `<Noun>Page` / `<Nouns>Page`                                      | `OrdersPage`                  |
 
 Cache tags and `revalidate<Noun>()` apply only once `cacheComponents` is on. Until then,
 actions call `revalidatePath()` directly.
@@ -151,7 +152,7 @@ components inside a file can use any plain name, as long as it doesn't mimic a r
 **Vendor code is exempt.** `components/ui/*` is generated by shadcn and keeps upstream names.
 Don't rename it, and don't put your own components there.
 
-#### Data layer (`lib/db/schema.ts`, `_lib/queries.ts`)
+#### Data layer (`lib/db/schema.ts`, `_lib/`, `modules/<x>/`)
 
 | Kind     | Where                                                                            | Identifier                                | Example                                      |
 | -------- | -------------------------------------------------------------------------------- | ----------------------------------------- | -------------------------------------------- |
@@ -163,23 +164,15 @@ Don't rename it, and don't put your own components there.
 `schema.ts` exports tables only. A DTO is the contract between the data layer and its UI. It
 lives in `contracts.ts` together with the input schemas, so one file shows everything that
 crosses the boundary in either direction. Inputs are zod schemas because they're untrusted;
-DTOs are plain types because the module builds them. UI imports DTOs through `index.ts`
-(client components with `import type`, so `server-only` never reaches the browser bundle),
-never a row type.
+DTOs are plain types because the data layer builds them. UI imports DTOs from `_lib/` before
+promotion and through the module's `index.ts` after (client components with `import type`, so
+`server-only` never reaches the browser bundle), never a row type.
 
 ## Stage 3: AI Gateway hello world
 
 - Time: _fill in_
 - Highest AI level: _fill in_
 
-**Convention friction**
+**Decisions**
 
-- The chat route handler imported a server action (`upsertMessageAction`), because neither the folder tree nor lint mentioned `app/api/`. Fixed by promoting `chats` to `modules/` (hard trigger 1) and adding lint rules for `app/api/**`.
-- Message types (`DatabaseMessages`, `Parts`) ended up in a client component and were imported by `_lib` and the route. The log said where DTOs live, but not that `_lib` must never import `_components`. Now enforced by lint.
-- The log didn't say where provider/AI code lives. For now the model call stays in the route handler; the model id comes from `lib/env.ts`.
-- The naming table said commands are exported via `server.ts`, the promotion section said `index.ts`. Settled on `index.ts`.
-- No rule for mapper or zod-schema names. Added `to<TargetType>` and `<useCase>Input`.
-- `_lib/queries.ts` became a pure pass-through after promotion. Replaced it with `withUser` binding in the module's `index.ts` (the tRPC/next-safe-action pattern, without the library). Option A (the Next DAL style, simpler) stays open: see [ADR 0001](docs/adr/0001-where-the-current-user-is-resolved.md).
-- DTOs moved from `queries.ts` into `contracts.ts`, next to the zod inputs. This also removed an import cycle between `queries.ts` and `mappers.ts`.
-- After promotion, `_lib/` held only the thin `actions.ts` adapter, so I moved it to `app/(chat)/actions.ts`. The log said `_lib/actions.ts` stays, and the lint globs were keyed on `_lib/`, so the move silently turned off `require-use-server`, `require-server-only` and the "route handlers never import actions" check, and lint stayed green. The rule's intent was right; it was tied to a folder instead of to a role. The globs now match `app/**/actions.ts`, and the log describes both states (`_lib/` before promotion, a bare `actions.ts` after).
-- Decision for Stage 4: only completed assistant replies are stored (`outcome.status === "completed"`); aborted and failed replies are dropped.
+- For Stage 4: only completed assistant replies are stored (`outcome.status === "completed"`); aborted and failed replies are dropped.
