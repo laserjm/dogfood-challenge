@@ -1,7 +1,8 @@
 "use client"
 
 import Spinner from "@/components/spinner"
-import { chatErrorResponse, type ChatMessage } from "@/modules/chats/contracts"
+import { errorBody } from "@/lib/http"
+import type { ChatMessage } from "@/modules/chats/contracts"
 import { useChat } from "@ai-sdk/react"
 import { DefaultChatTransport } from "ai"
 import { useState } from "react"
@@ -89,10 +90,10 @@ const FALLBACK = "Something went wrong. Try again in a moment."
 
 // Two shapes arrive here:
 // - HTTP error before the stream: `message` is the raw body, our `{ error }` JSON;
-// - error chunk during the stream: `message` is already describeAiError's copy.
+// - error chunk during the stream: `message` is already the route handler's copy.
 function readableError(error: Error): string {
   try {
-    const body = chatErrorResponse.safeParse(JSON.parse(error.message))
+    const body = errorBody.safeParse(JSON.parse(error.message))
     if (body.success) return body.data.error
   } catch {
     // Not JSON: an in-stream message, or a body we didn't write.

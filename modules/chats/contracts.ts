@@ -26,11 +26,6 @@ export const sendMessageInput = z.object({
 })
 export type SendMessageInput = z.infer<typeof sendMessageInput>
 
-// The body of every error the chat route handler answers with before a stream
-// starts. Parsed by the client, because a response body is untrusted input.
-export const chatErrorResponse = z.object({ error: z.string() })
-export type ChatErrorResponse = z.infer<typeof chatErrorResponse>
-
 // ── Out: DTOs the module returns; no runtime check, the module builds them ──
 
 // Later: UIMessage<ChatMetadata, never, ChatTools>

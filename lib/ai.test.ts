@@ -5,16 +5,16 @@ import {
 } from "@ai-sdk/gateway"
 import { RetryError } from "ai"
 import { describe, expect, it } from "vitest"
-import { describeAiError } from "./ai"
+import { classifyAiError } from "./ai"
 
-describe("describeAiError", () => {
+describe("classifyAiError", () => {
   it.each([
-    [new GatewayAuthenticationError(), /API key/],
-    [new GatewayModelNotFoundError(), /model/],
-    [new GatewayRateLimitError(), /busy/],
-    [new Error("socket hang up"), /couldn't answer/],
-  ])("maps %o to readable copy", (error, copy) => {
-    expect(describeAiError(error)).toMatch(copy)
+    [new GatewayAuthenticationError(), "auth"],
+    [new GatewayModelNotFoundError(), "model-not-found"],
+    [new GatewayRateLimitError(), "rate-limit"],
+    [new Error("socket hang up"), "unknown"],
+  ])("names %o", (error, kind) => {
+    expect(classifyAiError(error)).toBe(kind)
   })
 
   it("looks through a RetryError to the last attempt", () => {
@@ -23,6 +23,6 @@ describe("describeAiError", () => {
       reason: "maxRetriesExceeded",
       errors: [new GatewayRateLimitError(), new GatewayRateLimitError()],
     })
-    expect(describeAiError(error)).toMatch(/busy/)
+    expect(classifyAiError(error)).toBe("rate-limit")
   })
 })

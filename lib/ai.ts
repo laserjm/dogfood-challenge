@@ -20,21 +20,17 @@ export function chatModel(): LanguageModel {
   return model
 }
 
-// Turns a provider error into copy the user can read. Pure, so it is unit
-// testable; the real error is logged where it happens (streamText's onError).
-// Single-user local app: naming the env variable is the actionable hint.
-export function describeAiError(error: unknown): string {
+// What went wrong, named. The adapter words it: a lib client classifies errors
+// and never holds copy. Pure, so it is unit testable; the real error is logged
+// where it happens (streamText's onError).
+export type AiErrorKind = "auth" | "model-not-found" | "rate-limit" | "unknown"
+
+export function classifyAiError(error: unknown): AiErrorKind {
   // Retryable errors arrive wrapped once the retries are used up.
   const cause = RetryError.isInstance(error) ? error.lastError : error
 
-  if (GatewayAuthenticationError.isInstance(cause)) {
-    return "The AI service rejected the API key. Check AI_GATEWAY_API_KEY in .env.local and restart the server."
-  }
-  if (GatewayModelNotFoundError.isInstance(cause)) {
-    return "The configured AI model doesn't exist. Check AI_GATEWAY_MODEL in .env.local."
-  }
-  if (GatewayRateLimitError.isInstance(cause)) {
-    return "The AI service is busy right now. Wait a moment and try again."
-  }
-  return "The assistant couldn't answer. Try again in a moment."
+  if (GatewayAuthenticationError.isInstance(cause)) return "auth"
+  if (GatewayModelNotFoundError.isInstance(cause)) return "model-not-found"
+  if (GatewayRateLimitError.isInstance(cause)) return "rate-limit"
+  return "unknown"
 }
