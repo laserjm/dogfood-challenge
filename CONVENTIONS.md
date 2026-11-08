@@ -42,6 +42,7 @@ components/               # shared UI; components/ui/* is shadcn, untouched
 lib/
 ├─ auth.ts                # getUser / requireUser (cache()), withUser
 ├─ env.ts                 # validated env; the only reader of process.env (with lib/db/client.ts)
+├─ <service>.ts           # client for an external service (AI, mail): built from env, handed to modules by adapters
 └─ db/                    # client, schema (code-first), generated migrations; errors.ts names the driver codes
 scripts/                  # seed and maintenance: system callers (optional)
 ```
@@ -88,6 +89,10 @@ db itself; a bare `actions.ts` next to `page.tsx` means a module does.
 11. **A deviation is written down before it happens.** An `eslint-disable` carries a comment that
     links an ADR. A rule nobody can follow is changed in this file, not disabled in source.
     _Review._
+12. **A module imports from `lib/` only the db, and types.** An external service (AI provider,
+    mail, payments) is a client in `lib/<service>.ts`, built from `env`. The adapter constructs it
+    and passes it in, so a module never configures a provider and its tests need no provider
+    settings. `index.ts` is the one exception, for `lib/auth` (Rule 1). _Lint._
 
 ## The two states of a route
 
@@ -118,17 +123,23 @@ module is `server-only` and never reaches the browser bundle.
 A command throws, an adapter maps. Nothing above the module sees a driver error, and nothing in
 the UI sees an error class.
 
-| Case                                | Query / command                                       | Action                                                                 | Route handler       |
-| ----------------------------------- | ----------------------------------------------------- | ---------------------------------------------------------------------- | ------------------- |
-| Missing, not-owned or malformed id  | query returns `null`; command throws `<Noun>NotFound` | `notFound()`                                                           | `404`               |
-| Forbidden (once `policy.ts` exists) | command throws `Forbidden`                            | `forbidden()` (needs `experimental.authInterrupts`), else `notFound()` | `403`               |
-| Constraint refused the write        | command catches the driver error, throws `Conflict`   | `{ error }`                                                            | `409` + `{ error }` |
-| Invalid input                       | never reached: the adapter parses with `contracts.ts` | `{ error }`                                                            | `400` + `{ error }` |
-| Bug, broken invariant               | `throw new Error(…)`                                  | nearest `error.tsx`                                                    | `500`               |
+| Case                                | Query / command                                       | Action                                                                 | Route handler               |
+| ----------------------------------- | ----------------------------------------------------- | ---------------------------------------------------------------------- | --------------------------- |
+| Missing, not-owned or malformed id  | query returns `null`; command throws `<Noun>NotFound` | `notFound()`                                                           | `404` + `{ error }`         |
+| Forbidden (once `policy.ts` exists) | command throws `Forbidden`                            | `forbidden()` (needs `experimental.authInterrupts`), else `notFound()` | `403` + `{ error }`         |
+| Constraint refused the write        | command catches the driver error, throws `Conflict`   | `{ error }`                                                            | `409` + `{ error }`         |
+| Invalid input                       | never reached: the adapter parses with `contracts.ts` | `{ error }`                                                            | `400` + `{ error }`         |
+| Bug, broken invariant               | `throw new Error(…)`                                  | nearest `error.tsx`                                                    | `500` + `{ error }`, logged |
 
 - One answer for missing, foreign and malformed ids, so ownership isn't leaked. Until `policy.ts`
   exists, "not owned" is "not found" by design; `Forbidden` arrives with hard trigger 4.
 - `{ error }` holds copy the user can read (`useActionState`), never a class name or a tag.
+- A route handler answers JSON on every status, `404` and `500` included: `notFound()` would
+  render the HTML page. The body is `{ error: string }` everywhere, typed once in `lib/http.ts`,
+  never per module.
+- When a module must produce user-facing text itself, as in an error chunk after a stream has
+  started, the adapter hands it in as a function. A module never holds copy: `lib/` clients
+  classify errors, adapters word them.
 - The driver's error codes are recognized in one place, `lib/db/errors.ts` (`23505` unique,
   `23503` foreign key). A command catches there and throws `Conflict`; nothing else reads a driver
   error.
@@ -254,8 +265,8 @@ builds them. UI imports DTO types, never a row type.
 
 ## Sources of truth
 
-- `eslint.config.mjs`: the import graph, `server-only`,
-  `'use server'`, casts, `process.env`.
+- `eslint.config.mjs`: the import graph, `server-only`, `'use server'`, casts, `process.env`, what
+  a module may import from `lib/`.
 - `docs/adr/`: every decision that interprets or
   deviates from a rule, with the options considered and how to reverse it.
 - `test/global-setup.ts`, `test/factories.ts`: test database and fixtures.
