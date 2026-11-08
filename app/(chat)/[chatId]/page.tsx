@@ -1,14 +1,17 @@
-import { getChat } from "@/app/(chat)/_lib/queries"
 import { Bubble, BubbleContent } from "@/components/ui/bubble"
 import { Message, MessageContent, MessageGroup } from "@/components/ui/message"
 import { notFound } from "next/navigation"
 import { Streamdown } from "streamdown"
 import { ChatDeleteDialog } from "./_components/chat-delete-dialog"
+import { ChatPanel } from "./_components/chat-panel"
+import * as chats from "@/modules/chats"
 
 export default async function ChatPage(props: PageProps<"/[chatId]">) {
   const { chatId } = await props.params
-  const chat = await getChat(chatId)
+  const chat = await chats.getChat(chatId)
   if (!chat) notFound()
+
+  console.dir({ databaseMessages: chat.messages }, { depth: null })
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -17,7 +20,9 @@ export default async function ChatPage(props: PageProps<"/[chatId]">) {
         {chat.canDelete && <ChatDeleteDialog chatId={chatId} />}
       </header>
 
-      <div className="flex-1 overflow-y-auto">
+      <ChatPanel chatId={chatId} initialMessages={chat.messages} />
+
+      {/* <div className="flex-1 overflow-y-auto">
         <MessageGroup className="mx-auto w-full max-w-3xl gap-6 px-4 py-8">
           {chat.messages.length === 0 && (
             <p className="py-16 text-center text-sm text-muted-foreground">
@@ -51,7 +56,7 @@ export default async function ChatPage(props: PageProps<"/[chatId]">) {
             )
           })}
         </MessageGroup>
-      </div>
+      </div> */}
     </div>
   )
 }

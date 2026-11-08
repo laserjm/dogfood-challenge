@@ -1,3 +1,4 @@
+import type { UIMessage } from "ai"
 import {
   integer,
   json,
@@ -34,7 +35,8 @@ export const messagesTable = pgTable("messages", {
     .references(() => chatsTable.id),
   createdAt: timestamp("createdAt").notNull(),
   id: uuid("id").primaryKey().notNull().defaultRandom(),
-  parts: json("parts").$type<{ type: string; text?: string }[]>().notNull(),
-  role: varchar("role").notNull(),
+  parts: json("parts").$type<UIMessage["parts"]>().notNull(),
+  // TS-only enum: no migration, the column stays varchar.
+  role: varchar("role", { enum: ["system", "user", "assistant"] }).notNull(),
   position: integer("position").notNull(), // stable order
 })

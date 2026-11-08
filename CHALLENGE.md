@@ -131,10 +131,10 @@ Eight stages, each ending in a working, committable state. AI enters the app onl
 
 **Build:** Install `ai` and `@ai-sdk/react`, add `AI_GATEWAY_API_KEY`, a route handler that streams a reply from a gateway model string (`provider/model`), `useChat` on the chat page. No persistence yet.
 
-- [ ] A sent message streams a reply into the UI
-- [ ] A missing or invalid API key shows a readable error, not a blank screen
-- [ ] Model ID lives in one config place, not in components
-- [ ] Env vars are read and validated in one place
+- [x] A sent message streams a reply into the UI
+- [x] A missing or invalid API key shows a readable error, not a blank screen
+- [x] Model ID lives in one config place, not in components
+- [x] Env vars are read and validated in one place
 
 **Convention focus:** Where does AI/provider code live? Is it a feature folder, a lib, a service?
 
@@ -142,9 +142,9 @@ Eight stages, each ending in a working, committable state. AI enters the app onl
 
 **Build:** On each request, save the user message, load history from the DB (send only the newest message from the client), stream the reply, save the assistant message when it finishes. Hydrate `useChat` with stored messages on page load.
 
-- [ ] Reload after a reply shows the identical conversation
-- [ ] Every row has the correct role
-- [ ] Order is correct after 10+ exchanges
+- [x] Reload after a reply shows the identical conversation
+- [x] Every row has the correct role
+- [x] Order is correct after 10+ exchanges
 - [ ] Refreshing mid-stream keeps the user message and leaves no broken assistant row (or exactly the behaviour you decided)
 - [ ] Retrying a message creates no duplicates
 - [ ] Request body is validated before anything is written

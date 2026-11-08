@@ -1,5 +1,5 @@
 import { Button } from "@/components/ui/button"
-import { createChatAction } from "./_lib/actions"
+import { createChatAction } from "./actions"
 
 export default async function ChatsPage() {
   return (

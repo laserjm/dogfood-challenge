@@ -1,0 +1,46 @@
+import type { UIMessage } from "ai"
+import { z } from "zod"
+
+// Boundary types of the chats module: what goes in, and what comes out.
+// Browser-safe on purpose (Rule 6): forms validate with the same schema the action parses.
+
+// ── In: untrusted input, validated at runtime ──────────────────────────────
+
+export const chatIdInput = z.uuid()
+
+// The client may only send text. Tool parts are produced on the server.
+const textPart = z.object({
+  type: z.literal("text"),
+  text: z.string().trim().min(1),
+})
+
+export const sendMessageInput = z.object({
+  // Shape only: the module parses the id (findOwnedChat), so a malformed id
+  // is a 404 like a missing one, not a 400.
+  chatId: z.string(),
+  message: z.object({
+    id: z.uuid(),
+    role: z.literal("user"),
+    parts: z.array(textPart).min(1),
+  }),
+})
+export type SendMessageInput = z.infer<typeof sendMessageInput>
+
+// The body of every error the chat route handler answers with before a stream
+// starts. Parsed by the client, because a response body is untrusted input.
+export const chatErrorResponse = z.object({ error: z.string() })
+export type ChatErrorResponse = z.infer<typeof chatErrorResponse>
+
+// ── Out: DTOs the module returns; no runtime check, the module builds them ──
+
+// Later: UIMessage<ChatMetadata, never, ChatTools>
+export type ChatMessage = UIMessage
+
+export type ChatListItem = { id: string; title: string }
+
+export type ChatDetail = {
+  id: string
+  title: string
+  canDelete: boolean
+  messages: ChatMessage[]
+}

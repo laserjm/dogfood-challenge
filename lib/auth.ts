@@ -23,3 +23,12 @@ export async function requireUser(): Promise<SessionUser> {
     throw new Error("No user in the database. Run the seed script first.")
   return user
 }
+
+// Binds the current user to a function that takes it as `requester`.
+// Modules use this in index.ts only (ADR 0001), so their internals stay
+// free of request context and testable without Next.
+export function withUser<A extends unknown[], R>(
+  fn: (requester: SessionUser, ...args: A) => Promise<R>
+) {
+  return async (...args: A): Promise<R> => fn(await requireUser(), ...args)
+}

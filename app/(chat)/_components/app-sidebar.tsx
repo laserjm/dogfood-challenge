@@ -1,7 +1,7 @@
 import { Suspense } from "react"
 import Link from "next/link"
 
-import { getChats } from "@/app/(chat)/_lib/queries"
+import * as chats from "@/modules/chats"
 import {
   Sidebar,
   SidebarContent,
@@ -50,9 +50,9 @@ export function AppSidebar() {
 }
 
 async function ChatList() {
-  const chats = await getChats()
+  const list = await chats.getChats()
 
-  return chats.map((chat) => (
+  return list.map((chat) => (
     <SidebarMenuItem key={chat.id}>
       <SidebarMenuButton render={<Link href={`/${chat.id}`} />}>
         <span>{chat.title}</span>
