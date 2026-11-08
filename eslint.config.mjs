@@ -278,8 +278,8 @@ const eslintConfig = defineConfig([
     },
   },
 
-  // CONVENTIONS.md Rule 1: only a module's index.ts binds the current user (`withUser`).
-  // Everything else in a module takes `requester` and may import auth types only.
+  // Rule 12: a module imports from lib/ only the db, and types. Auth is bound in index.ts
+  // (Rule 1); clients for external services are built by the adapter and passed in.
   {
     files: ["modules/**"],
     ignores: ["modules/*/index.ts"],
@@ -289,10 +289,29 @@ const eslintConfig = defineConfig([
         {
           patterns: [
             {
-              group: ["@/lib/auth", "@/lib/auth/*"],
+              group: ["@/lib/*", "@/lib/*/*", "!@/lib/db", "!@/lib/db/*"],
               allowTypeImports: true,
               message:
-                "Only a module's index.ts binds the user (withUser). Take `requester` and use `import type`.",
+                "A module imports from lib/ only the db (Rule 12). Take `requester` instead of lib/auth, take the client as a parameter, use `import type` for types.",
+            },
+          ],
+        },
+      ],
+    },
+  },
+  // Rule 1: index.ts imports lib/auth to bind the user, and nothing else from lib/.
+  {
+    files: ["modules/*/index.ts"],
+    rules: {
+      "@typescript-eslint/no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: ["@/lib/*", "@/lib/*/*", "!@/lib/auth"],
+              allowTypeImports: true,
+              message:
+                "index.ts binds the user with withUser from lib/auth and imports nothing else from lib/.",
             },
           ],
         },
