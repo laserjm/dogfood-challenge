@@ -15,7 +15,9 @@ const textPart = z.object({
 })
 
 export const sendMessageInput = z.object({
-  chatId: chatIdInput,
+  // Shape only: the module parses the id (findOwnedChat), so a malformed id
+  // is a 404 like a missing one, not a 400.
+  chatId: z.string(),
   message: z.object({
     id: z.uuid(),
     role: z.literal("user"),

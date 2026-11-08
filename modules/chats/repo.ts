@@ -2,16 +2,20 @@ import "server-only"
 import { and, eq, max } from "drizzle-orm"
 import { db } from "@/lib/db/client"
 import { chatsTable, messagesTable } from "@/lib/db/schema"
+import { chatIdInput } from "./contracts"
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0]
 type Executor = typeof db | Tx
 
-// The ownership check, shared by the read and the write paths.
+// The ownership check, shared by the read and the write paths. A malformed id
+// is treated like a missing one, so no caller can forget to parse it.
 export async function findOwnedChat(
   exec: Executor,
   userId: string,
   chatId: string
 ) {
+  if (!chatIdInput.safeParse(chatId).success) return null
+
   const [chat] = await exec
     .select({
       id: chatsTable.id,

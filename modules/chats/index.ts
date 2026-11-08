@@ -11,8 +11,7 @@ export const getChat = withUser(queries.getChat)
 
 export const createChat = withUser(commands.createChat)
 export const deleteChat = withUser(commands.deleteChat)
-export const saveUserMessage = withUser(commands.saveUserMessage)
-export const saveAssistantMessage = withUser(commands.saveAssistantMessage)
+export const sendMessage = withUser(commands.sendMessage)
 
 export { sendMessageInput } from "./contracts"
 export type {
