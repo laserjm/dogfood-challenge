@@ -84,6 +84,20 @@ const noComponentsInLib = {
   message:
     "`_lib` and `actions.ts` never import `_components`. Types the UI needs come from the query or module that returns them.",
 }
+// "Outside Next": files that run in plain Node can't load a `server-only` file as a value.
+const noServerOnlyLibOutsideNext = {
+  group: [
+    "@/lib/env",
+    "@/lib/db/client",
+    "@/lib/auth",
+    "**/lib/env",
+    "**/lib/db/client",
+    "**/lib/auth",
+  ],
+  allowTypeImports: true,
+  message:
+    "This file runs outside Next, where `server-only` throws. Load .env.local with dotenv, read process.env, build the db client from it and import schema.ts (CONVENTIONS.md, Outside Next).",
+}
 const noRouteLibInApi = {
   group: [
     "**/_lib",
@@ -102,8 +116,9 @@ const eslintConfig = defineConfig([
   ...nextTs,
   globalIgnores([".next/**", "out/**", "build/**", "next-env.d.ts"]),
 
-  // Rule 2: only `_lib/*`, `lib/` and `modules/` may import the db.
-  // `_lib` may import the db, but modules only through their index.ts.
+  // Rule 3: only `_lib/*`, `lib/` and `modules/` may import the db (inside Next; scripts/ and
+  // test/ are exempt, see "Outside Next"). `_lib` may import the db, but modules only through
+  // their index.ts.
   {
     files: ["app/**/_lib/**"],
     rules: {
@@ -136,11 +151,16 @@ const eslintConfig = defineConfig([
       ],
     },
   },
-  // Scripts (seed, maintenance) are system callers too (Rule 6, second door).
+  // Scripts (seed, maintenance) are system callers (Rule 6, second door) that run outside Next
+  // ("Outside Next"): `server-only` throws there, so they build their own db client from
+  // process.env and import schema.ts, never env/client/auth as values.
   {
     files: ["scripts/**"],
     rules: {
-      "no-restricted-imports": ["error", { patterns: [noSessionBoundModule] }],
+      "@typescript-eslint/no-restricted-imports": [
+        "error",
+        { patterns: [noSessionBoundModule, noServerOnlyLibOutsideNext] },
+      ],
     },
   },
   // Route handlers are adapters: no db, no route `_lib`/`actions.ts`/`_components`, modules via index.ts.
@@ -166,8 +186,9 @@ const eslintConfig = defineConfig([
     },
   },
 
-  // Rule 3: server-only on every file that touches db or auth.
-  // schema.ts is exempt: drizzle-kit and seed.ts load it outside Next, where `server-only` throws.
+  // Rule 4: server-only on every file that touches db or auth.
+  // schema.ts is exempt: drizzle-kit, scripts/ and test/ load it outside Next, where
+  // `server-only` throws ("Outside Next"). Those places are not matched here either.
   {
     files: [
       "app/**/_lib/**",
@@ -188,7 +209,7 @@ const eslintConfig = defineConfig([
     rules: { "local/require-server-only": "error" },
   },
 
-  // Rule 3, actions: `'use server'` first, then `import 'server-only'` (checked above).
+  // Rule 4, actions: `'use server'` first, then `import 'server-only'` (checked above).
   // Matches both `_lib/actions.ts` (before promotion) and the route-level adapter (after).
   {
     files: ["app/**/actions.ts"],
@@ -196,7 +217,7 @@ const eslintConfig = defineConfig([
     rules: { "local/require-use-server": "error" },
   },
 
-  // Rule 4: lib/ never imports app/ (or modules/).
+  // Rule 5: lib/ never imports app/ (or modules/).
   {
     files: ["lib/**"],
     rules: {
@@ -218,7 +239,8 @@ const eslintConfig = defineConfig([
     },
   },
 
-  // Promoted modules: no Next, and app/ only through index.ts.
+  // Rule 5 and Rule 6: promoted modules import no Next and no app/, and reach other modules
+  // only through queries/commands/errors.
   {
     files: ["modules/**"],
     rules: {
@@ -262,7 +284,8 @@ const eslintConfig = defineConfig([
     },
   },
 
-  // Rule 9: lib/env.ts is the only reader of process.env.
+  // Rule 9: lib/env.ts is the only reader of process.env inside Next. scripts/, test/ and the
+  // tool configs are deliberately not matched ("Outside Next").
   {
     files: ["app/**", "modules/**", "lib/**", "components/**", "hooks/**"],
     ignores: ["lib/env.ts"],

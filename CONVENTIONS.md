@@ -44,7 +44,8 @@ lib/
 ├─ env.ts                 # validated env; the only reader of process.env
 ├─ <service>.ts           # client for an external service (AI, mail): built from env, handed to modules by adapters
 └─ db/                    # client, schema (code-first), generated migrations; errors.ts names the driver codes
-scripts/                  # seed and maintenance: system callers (optional)
+scripts/                  # seed and maintenance; runs outside Next (see Outside Next)
+test/                     # global-setup.ts, factories.ts; runs outside Next (see Outside Next)
 ```
 
 A route is in one of two states, and the folder shows which: `_lib/` means the route talks to the
@@ -57,10 +58,11 @@ db itself; a bare `actions.ts` next to `page.tsx` means a module does.
    Adapters never pass a user. _Lint for modules, review for `_lib`._
 2. **Every read filters by the caller, every write is scoped by the caller**
    (`eq(table.userId, requester.id)`). The ownership check is the policy. _Review, plus Testing §5._
-3. **Only `_lib/*`, `modules/*` and `lib/` import the db.** _Lint._
+3. **Only `_lib/*`, `modules/*` and `lib/` import the db** inside the Next server. The files listed
+   under _Outside Next_ bring their own. _Lint._
 4. **Server-side code starts with `import 'server-only'`;** in `actions.ts`, `'use server'` comes
-   first. Exempt: `contracts.ts` (browser-safe by design), `schema.ts` (drizzle-kit loads it
-   outside Next) and tests. _Lint._
+   first. Exempt: `contracts.ts` (browser-safe by design), `schema.ts` (loaded outside Next) and
+   everything listed under _Outside Next_. _Lint._
 5. **Dependencies point one way.** `lib/` imports neither `app/` nor `modules/`; `modules/` imports
    neither `app/` nor `next/*`. Two modules that import each other are merged, or a third is
    extracted. _Lint, cycles by review._
@@ -81,8 +83,9 @@ db itself; a bare `actions.ts` next to `page.tsx` means a module does.
    them. _Review._
 8. **No `as` cast** outside `mappers.ts`, `lib/db/` and `as const`. If the types don't line up, fix
    the schema or add a mapper. `components/ui/*` is vendor code and exempt. _Lint._
-9. **`lib/env.ts` is the only reader of `process.env`.** Everything else, the db client included,
-   reads `env.X`, so a missing variable fails at startup, not in a request. _Lint._
+9. **`lib/env.ts` is the only reader of `process.env`** inside the Next server. Everything else,
+   the db client included, reads `env.X`, so a missing variable fails at startup, not in a
+   request. The files listed under _Outside Next_ read `process.env` themselves. _Lint._
 10. **The schema is code-first and the database holds no logic.** `lib/db/schema.ts` is the source
     of truth, migrations are generated and never hand-edited, and there are no database functions
     and no triggers except `updated_at`. _Review._
@@ -93,6 +96,29 @@ db itself; a bare `actions.ts` next to `page.tsx` means a module does.
     mail, payments) is a client in `lib/<service>.ts`, built from `env`. The adapter constructs it
     and passes it in, so a module never configures a provider and its tests need no provider
     settings. `index.ts` is the one exception, for `lib/auth` (Rule 1). _Lint._
+
+## Outside Next
+
+Four places run in plain Node, where `server-only` throws on import: the tool configs
+(`drizzle.config.ts`, `vitest.config.ts`), `scripts/` and `test/`. They are the one exemption to
+Rules 3, 4 and 9, and this list is the exemption: a file joins it here before it joins the repo.
+
+- **No value import of a `server-only` file.** `lib/env.ts`, `lib/db/client.ts`, `lib/auth.ts`
+  and `modules/*` are off limits; types are fine. `lib/db/schema.ts` carries no `server-only` for
+  exactly this reason. _Lint for `scripts/`, review for the rest._
+- **They read the environment themselves.** `dotenv` loads `.env.local`, then `process.env.X`
+  directly. A missing variable fails on the first query instead of at startup; acceptable for a
+  tool a developer runs by hand, not for anything that serves a request. _Review._
+- **`scripts/` build their own db client** from `process.env.DATABASE_URL` and write raw rows
+  through `schema.ts`. That is arrange code, not a use case, so Rule 2 does not apply.
+- **`test/` goes through `lib/db/client.ts`.** `vitest.config.ts` swaps `server-only` for a no-op
+  and sets `DATABASE_URL` to the test database, so `factories.ts` shares the client with the
+  module under test (Testing §2, §4). `global-setup.ts` runs before that env is applied and builds
+  its own client from the project config.
+
+> **Open:** Rule 6 lets `scripts/` call `commands.ts`, but `commands.ts` is `server-only` and no
+> script can load it today. A maintenance script that needs a use case, not raw rows, must run
+> with the same `server-only` swap `vitest.config.ts` uses. Decide when the first one is written.
 
 ## The two states of a route
 
@@ -263,6 +289,8 @@ builds them. UI imports DTO types, never a row type.
 
 ## Sources of truth
 
+- This file: the rules and their numbers. A comment in `eslint.config.mjs`, an ADR or a log entry
+  that cites "Rule n" means the n-th rule above; renumbering here renumbers them.
 - `eslint.config.mjs`: the import graph, `server-only`, `'use server'`, casts, `process.env`, what
   a module may import from `lib/`.
 - `docs/adr/`: every decision that interprets or
