@@ -145,9 +145,9 @@ Eight stages, each ending in a working, committable state. AI enters the app onl
 - [x] Reload after a reply shows the identical conversation
 - [x] Every row has the correct role
 - [x] Order is correct after 10+ exchanges
-- [ ] Refreshing mid-stream keeps the user message and leaves no broken assistant row (or exactly the behaviour you decided)
-- [ ] Retrying a message creates no duplicates
-- [ ] Request body is validated before anything is written
+- [x] Refreshing mid-stream keeps the user message and leaves no broken assistant row (or exactly the behaviour you decided)
+- [x] Retrying a message creates no duplicates
+- [x] Request body is validated before anything is written
 
 **Hint (L1):** look up `onFinish`, `originalMessages` and `consumeStream` in the docs for your installed AI SDK version.
 
