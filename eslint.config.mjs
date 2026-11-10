@@ -84,19 +84,12 @@ const noComponentsInLib = {
   message:
     "`_lib` and `actions.ts` never import `_components`. Types the UI needs come from the query or module that returns them.",
 }
-// "Outside Next": files that run in plain Node can't load a `server-only` file as a value.
-const noServerOnlyLibOutsideNext = {
-  group: [
-    "@/lib/env",
-    "@/lib/db/client",
-    "@/lib/auth",
-    "**/lib/env",
-    "**/lib/db/client",
-    "**/lib/auth",
-  ],
+// Rule 1: a script has no session, so it never resolves the current user.
+const noSessionInScripts = {
+  group: ["@/lib/auth", "**/lib/auth"],
   allowTypeImports: true,
   message:
-    "This file runs outside Next, where `server-only` throws. Load .env.local with dotenv, read process.env, build the db client from it and import schema.ts (CONVENTIONS.md, Outside Next).",
+    "A script has no session: name the requester it acts for and call `@/modules/<x>/queries` or `/commands` (Rule 1, Rule 6).",
 }
 const noRouteLibInApi = {
   group: [
@@ -116,9 +109,9 @@ const eslintConfig = defineConfig([
   ...nextTs,
   globalIgnores([".next/**", "out/**", "build/**", "next-env.d.ts"]),
 
-  // Rule 3: only `_lib/*`, `lib/` and `modules/` may import the db (inside Next; scripts/ and
-  // test/ are exempt, see "Outside Next"). `_lib` may import the db, but modules only through
-  // their index.ts.
+  // Rule 3: only `_lib/*`, `lib/` and `modules/` may import the db; outside the app, test/ and
+  // scripts/ do too (they are not matched below). `_lib` may import the db, but modules only
+  // through their index.ts.
   {
     files: ["app/**/_lib/**"],
     rules: {
@@ -151,15 +144,15 @@ const eslintConfig = defineConfig([
       ],
     },
   },
-  // Scripts (seed, maintenance) are system callers (Rule 6, second door) that run outside Next
-  // ("Outside Next"): `server-only` throws there, so they build their own db client from
-  // process.env and import schema.ts, never env/client/auth as values.
+  // Scripts (seed, maintenance) are system callers (Rule 6, second door). `pnpm seed` runs them
+  // with the `react-server` condition (Rule 4), so they use lib/env and lib/db/client like the
+  // app, but never lib/auth: there is no session.
   {
     files: ["scripts/**"],
     rules: {
       "@typescript-eslint/no-restricted-imports": [
         "error",
-        { patterns: [noSessionBoundModule, noServerOnlyLibOutsideNext] },
+        { patterns: [noSessionBoundModule, noSessionInScripts] },
       ],
     },
   },
@@ -186,9 +179,9 @@ const eslintConfig = defineConfig([
     },
   },
 
-  // Rule 4: server-only on every file that touches db or auth.
-  // schema.ts is exempt: drizzle-kit, scripts/ and test/ load it outside Next, where
-  // `server-only` throws ("Outside Next"). Those places are not matched here either.
+  // Rule 4: server-only on every file that touches db or auth. Scripts too: their runner sets
+  // the `react-server` condition, so running one without it fails loudly.
+  // schema.ts is exempt: drizzle-kit loads it without that condition. Tests are exempt.
   {
     files: [
       "app/**/_lib/**",
@@ -198,6 +191,7 @@ const eslintConfig = defineConfig([
       "lib/auth.ts",
       "lib/auth/**",
       "modules/**",
+      "scripts/**",
     ],
     ignores: [
       "lib/db/migrations/**",
@@ -284,10 +278,19 @@ const eslintConfig = defineConfig([
     },
   },
 
-  // Rule 9: lib/env.ts is the only reader of process.env inside Next. scripts/, test/ and the
-  // tool configs are deliberately not matched ("Outside Next").
+  // Rule 9: lib/env.ts is the only reader of process.env. The tool configs at the root
+  // (drizzle.config.ts, vitest.config.ts) are not matched: their tools load them without the
+  // `react-server` condition, so they can't import lib/env.
   {
-    files: ["app/**", "modules/**", "lib/**", "components/**", "hooks/**"],
+    files: [
+      "app/**",
+      "modules/**",
+      "lib/**",
+      "components/**",
+      "hooks/**",
+      "scripts/**",
+      "test/**",
+    ],
     ignores: ["lib/env.ts"],
     rules: {
       "no-restricted-properties": [

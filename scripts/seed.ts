@@ -1,10 +1,10 @@
-import { config } from "dotenv"
-import { drizzle } from "drizzle-orm/node-postgres"
+// Run with `pnpm seed`: the runner sets the `react-server` condition, so
+// `server-only` resolves to its empty export and this script uses the app's
+// env and db client (Rule 4, Rule 9).
+import "server-only"
 import { eq, inArray } from "drizzle-orm"
-import { chatsTable, messagesTable, usersTable } from "../lib/db/schema"
-
-config({ path: ".env.local" })
-const db = drizzle(process.env.DATABASE_URL!)
+import { db } from "@/lib/db/client"
+import { chatsTable, messagesTable, usersTable } from "@/lib/db/schema"
 
 const SEED_EMAIL = "john@example.com"
 

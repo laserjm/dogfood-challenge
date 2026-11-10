@@ -66,12 +66,11 @@ export function ChatPanel({ chatId, initialMessages }: ChatPanelProps) {
         return
       }
       if (toolCall.toolName === "getLocation") {
-        const cities = ["New York", "Los Angeles", "Chicago", "San Francisco"]
         // No await - avoids potential deadlocks
         addToolOutput({
           tool: "getLocation",
           toolCallId: toolCall.toolCallId,
-          output: cities[Math.floor(Math.random() * cities.length)],
+          output: pickCity(),
         })
       }
     },
@@ -251,6 +250,11 @@ export function ChatPanel({ chatId, initialMessages }: ChatPanelProps) {
     </>
   )
 }
+
+// Stand-in for a real location lookup. Outside the component, because the
+// React Compiler treats Math.random inside it as an impure render.
+const CITIES = ["New York", "Los Angeles", "Chicago", "San Francisco"]
+const pickCity = () => CITIES[Math.floor(Math.random() * CITIES.length)]
 
 const FALLBACK = "Something went wrong. Try again in a moment."
 
