@@ -1,5 +1,5 @@
 import "server-only"
-import { and, eq, max } from "drizzle-orm"
+import { and, desc, eq, max } from "drizzle-orm"
 import { db } from "@/lib/db/client"
 import { chatsTable, messagesTable } from "@/lib/db/schema"
 import { chatIdInput } from "./contracts"
@@ -34,4 +34,18 @@ export async function nextPosition(exec: Executor, chatId: string) {
     .from(messagesTable)
     .where(eq(messagesTable.chatId, chatId))
   return (row?.value ?? -1) + 1
+}
+
+export async function findLastMessage(exec: Executor, chatId: string) {
+  const [row] = await exec
+    .select({
+      id: messagesTable.id,
+      role: messagesTable.role,
+      parts: messagesTable.parts,
+    })
+    .from(messagesTable)
+    .where(eq(messagesTable.chatId, chatId))
+    .orderBy(desc(messagesTable.position))
+    .limit(1)
+  return row ?? null
 }

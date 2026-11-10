@@ -1,6 +1,9 @@
 import "server-only"
 import {
   convertToModelMessages,
+  getToolName,
+  isStaticToolUIPart,
+  stepCountIs,
   streamText,
   toUIMessageStream,
   type LanguageModel,
@@ -10,11 +13,19 @@ import { and, eq } from "drizzle-orm"
 import type { SessionUser } from "@/lib/auth"
 import { db } from "@/lib/db/client"
 import { chatsTable, messagesTable } from "@/lib/db/schema"
-import type { ChatMessage, SendMessageInput } from "./contracts"
-import { ChatNotFound } from "./errors"
-import { toMessageRow } from "./mappers"
+import {
+  clientToolNames,
+  toolSchemas,
+  type ChatMessage,
+  type ClientToolName,
+  type SendMessageInput,
+  type ToolOutputsInput,
+} from "./contracts"
+import { ChatNotFound, ToolOutputRejected } from "./errors"
+import { toChatMessage, toMessageRow } from "./mappers"
 import { getChat } from "./queries"
-import { findOwnedChat, nextPosition } from "./repo"
+import { findLastMessage, findOwnedChat, nextPosition } from "./repo"
+import { chatTools } from "./tools"
 
 const INSTRUCTIONS = "You are a helpful assistant."
 
@@ -51,18 +62,39 @@ export type SendMessageOptions = {
 export async function sendMessage(
   requester: SessionUser,
   input: SendMessageInput,
-  { model, describeError }: SendMessageOptions
+  options: SendMessageOptions
 ) {
   await saveUserMessage(requester, input) // ownership check; throws ChatNotFound
+  return streamReply(requester, input.chatId, options)
+}
 
+// The browser answered the client tools of the newest assistant message:
+// store the outputs on that message, then let the model continue it.
+export async function continueAfterToolOutputs(
+  requester: SessionUser,
+  input: ToolOutputsInput,
+  options: SendMessageOptions
+) {
+  await saveToolOutputs(requester, input) // ownership check; throws ChatNotFound
+  return streamReply(requester, input.chatId, options)
+}
+
+async function streamReply(
+  requester: SessionUser,
+  chatId: string,
+  { model, describeError }: SendMessageOptions
+) {
   // History comes from the db, not from the client.
-  const chat = await getChat(requester, input.chatId)
-  if (!chat) throw new ChatNotFound(input.chatId) // deleted in between
+  const chat = await getChat(requester, chatId)
+  if (!chat) throw new ChatNotFound(chatId) // deleted in between
 
   const result = streamText({
     model,
     instructions: INSTRUCTIONS,
-    messages: await convertToModelMessages(chat.messages),
+    messages: await convertToModelMessages(chat.messages, { tools: chatTools }),
+    tools: chatTools,
+    // Server tools run in a loop here; the loop stops at a client tool.
+    stopWhen: stepCountIs(5),
     onError: ({ error }) => {
       console.error("[chats] generation error", error)
     },
@@ -70,6 +102,7 @@ export async function sendMessage(
 
   return toUIMessageStream({
     stream: result.stream,
+    // If the last message is the assistant's, the reply continues it (same id).
     originalMessages: chat.messages,
     onError: describeError,
     generateMessageId: () => crypto.randomUUID(),
@@ -88,6 +121,60 @@ export async function sendMessage(
     },
   })
 }
+
+// Only the newest message can take outputs, and only for client tool calls
+// that are still waiting. Anything else the browser sends is ignored, so it
+// can't overwrite a server tool's result or the model's text.
+export async function saveToolOutputs(
+  requester: SessionUser,
+  input: ToolOutputsInput
+) {
+  await db.transaction(async (tx) => {
+    const chat = await findOwnedChat(tx, requester.id, input.chatId)
+    if (!chat) throw new ChatNotFound(input.chatId)
+
+    const last = await findLastMessage(tx, chat.id)
+    if (last?.role !== "assistant" || last.id !== input.messageId) {
+      throw new ToolOutputRejected(input.messageId, "not the newest message")
+    }
+
+    const parts = applyToolOutputs(toChatMessage(last).parts, input.outputs)
+    if (parts.some(isWaitingToolCall)) {
+      throw new ToolOutputRejected(input.messageId, "a tool call is unanswered")
+    }
+
+    await tx
+      .update(messagesTable)
+      .set({ parts })
+      .where(
+        and(eq(messagesTable.id, last.id), eq(messagesTable.chatId, chat.id))
+      )
+  })
+}
+
+function applyToolOutputs(
+  parts: ChatMessage["parts"],
+  outputs: ToolOutputsInput["outputs"]
+): ChatMessage["parts"] {
+  return parts.map((part) => {
+    if (!isWaitingToolCall(part)) return part
+    const toolName = getToolName(part)
+    if (!isClientTool(toolName)) return part
+
+    const sent = outputs.find((o) => o.toolCallId === part.toolCallId)
+    if (!sent) return part
+    const output = toolSchemas[toolName].output.safeParse(sent.output)
+    if (!output.success) return part
+
+    return { ...part, state: "output-available", output: output.data }
+  })
+}
+
+const isWaitingToolCall = (part: ChatMessage["parts"][number]) =>
+  isStaticToolUIPart(part) && part.state === "input-available"
+
+const isClientTool = (name: string): name is ClientToolName =>
+  clientToolNames.some((n) => n === name)
 
 // Role is fixed by the command, never by the caller. A retry with the same
 // message id is a no-op.
