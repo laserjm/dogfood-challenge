@@ -7,7 +7,13 @@ type NewMessageRow = typeof messagesTable.$inferInsert
 
 export const toChatMessage = (
   row: Pick<MessageRow, "id" | "role" | "parts">
-): ChatMessage => ({ id: row.id, role: row.role, parts: row.parts })
+): ChatMessage => ({
+  id: row.id,
+  role: row.role,
+  // The column is typed with the SDK's untyped parts (lib/ can't import
+  // modules/); the module only ever stores ChatMessage parts.
+  parts: row.parts as ChatMessage["parts"],
+})
 
 export const toMessageRow = (
   chatId: string,

@@ -3,7 +3,11 @@
 import Spinner from "@/components/spinner"
 import { chatErrorResponse, type ChatMessage } from "@/modules/chats/contracts"
 import { useChat } from "@ai-sdk/react"
-import { DefaultChatTransport } from "ai"
+import {
+  DefaultChatTransport,
+  isStaticToolUIPart,
+  lastAssistantMessageIsCompleteWithToolCalls,
+} from "ai"
 import { useState } from "react"
 
 export type ChatPanelProps = {
@@ -12,19 +16,64 @@ export type ChatPanelProps = {
 }
 
 export function ChatPanel({ chatId, initialMessages }: ChatPanelProps) {
-  const { messages, sendMessage, regenerate, status, stop, error } = useChat({
+  const {
+    messages,
+    sendMessage,
+    regenerate,
+    addToolOutput,
+    status,
+    stop,
+    error,
+  } = useChat({
     id: chatId,
     messages: initialMessages,
     generateId: () => crypto.randomUUID(),
     transport: new DefaultChatTransport({
       api: "/api/chat",
-      // Send only the newest message; the server loads the history from the db.
-      prepareSendMessagesRequest: ({ id, messages }) => ({
-        body: { chatId: id, message: messages.at(-1) },
-      }),
+      // Send only what is new; the server loads the history from the db.
+      prepareSendMessagesRequest: ({ id, messages }) => {
+        const last = messages.at(-1)
+        // An automatic resend after addToolOutput: the newest message is the
+        // assistant's, and what's new are the tool outputs on it.
+        if (last?.role === "assistant") {
+          return {
+            body: {
+              type: "tool-outputs",
+              chatId: id,
+              messageId: last.id,
+              outputs: last.parts
+                .filter(isStaticToolUIPart)
+                .filter((part) => part.state === "output-available")
+                .map((part) => ({
+                  toolCallId: part.toolCallId,
+                  output: part.output,
+                })),
+            },
+          }
+        }
+        return { body: { type: "message", chatId: id, message: last } }
+      },
     }),
     onError: (error) => {
       console.error("[client] chat error", error)
+    },
+
+    sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,
+    // run client-side tools that are automatically executed:
+    async onToolCall({ toolCall }) {
+      // Check if it's a dynamic tool first for proper type narrowing
+      if (toolCall.dynamic) {
+        return
+      }
+      if (toolCall.toolName === "getLocation") {
+        const cities = ["New York", "Los Angeles", "Chicago", "San Francisco"]
+        // No await - avoids potential deadlocks
+        addToolOutput({
+          tool: "getLocation",
+          toolCallId: toolCall.toolCallId,
+          output: cities[Math.floor(Math.random() * cities.length)],
+        })
+      }
     },
   })
   const [input, setInput] = useState("")
@@ -36,9 +85,127 @@ export function ChatPanel({ chatId, initialMessages }: ChatPanelProps) {
       {messages.map((message) => (
         <div key={message.id}>
           {message.role === "user" ? "User: " : "AI: "}
-          {message.parts.map((part, index) =>
-            part.type === "text" ? <span key={index}>{part.text}</span> : null
-          )}
+          {message.parts.map((part, index) => {
+            // part.type === "text" ? <span key={index}>{part.text}</span> : null
+            switch (part.type) {
+              // render text parts as simple text:
+              case "text":
+                return <span key={index}>{part.text}</span>
+              // for tool parts, use the typed tool part names:
+              case "tool-askForConfirmation": {
+                const callId = part.toolCallId
+                switch (part.state) {
+                  case "input-streaming":
+                    return (
+                      <div key={callId}>Loading confirmation request...</div>
+                    )
+                  case "input-available":
+                    return (
+                      <div key={callId}>
+                        {part.input.message}
+                        <div>
+                          <button
+                            onClick={() =>
+                              addToolOutput({
+                                tool: "askForConfirmation",
+                                toolCallId: callId,
+                                output: "Yes, confirmed.",
+                              })
+                            }
+                          >
+                            Yes
+                          </button>
+                          <button
+                            onClick={() =>
+                              addToolOutput({
+                                tool: "askForConfirmation",
+                                toolCallId: callId,
+                                output: "No, denied",
+                              })
+                            }
+                          >
+                            No
+                          </button>
+                        </div>
+                      </div>
+                    )
+                  case "approval-requested":
+                    return <div key={callId}>Approval requested.</div>
+                  case "approval-responded":
+                    return <div key={callId}>Approval response received.</div>
+                  case "output-available":
+                    return (
+                      <div key={callId}>Confirmation result: {part.output}</div>
+                    )
+                  case "output-error":
+                    return <div key={callId}>Error: {part.errorText}</div>
+                  case "output-denied":
+                    return <div key={callId}>Tool call denied.</div>
+                }
+                break
+              }
+              case "tool-getLocation": {
+                const callId = part.toolCallId
+                switch (part.state) {
+                  case "input-streaming":
+                    return <div key={callId}>Preparing location request...</div>
+                  case "input-available":
+                    return <div key={callId}>Getting location...</div>
+                  case "approval-requested":
+                    return <div key={callId}>Approval requested.</div>
+                  case "approval-responded":
+                    return <div key={callId}>Approval response received.</div>
+                  case "output-available":
+                    return <div key={callId}>Location: {part.output}</div>
+                  case "output-error":
+                    return (
+                      <div key={callId}>
+                        Error getting location: {part.errorText}
+                      </div>
+                    )
+                  case "output-denied":
+                    return <div key={callId}>Location request denied.</div>
+                }
+                break
+              }
+              case "tool-getWeatherInformation": {
+                const callId = part.toolCallId
+                switch (part.state) {
+                  // example of pre-rendering streaming tool inputs:
+                  case "input-streaming":
+                    return (
+                      <pre key={callId}>{JSON.stringify(part, null, 2)}</pre>
+                    )
+                  case "input-available":
+                    return (
+                      <div key={callId}>
+                        Getting weather information for {part.input.city}...
+                      </div>
+                    )
+                  case "approval-requested":
+                    return <div key={callId}>Approval requested.</div>
+                  case "approval-responded":
+                    return <div key={callId}>Approval response received.</div>
+                  case "output-available":
+                    return (
+                      <div key={callId}>
+                        Weather in {part.input.city}: {part.output}
+                      </div>
+                    )
+                  case "output-error":
+                    return (
+                      <div key={callId}>
+                        Error getting weather for {part.input?.city}:{" "}
+                        {part.errorText}
+                      </div>
+                    )
+                  case "output-denied":
+                    return <div key={callId}>Weather request denied.</div>
+                }
+                break
+              }
+            }
+          })}
         </div>
       ))}
 

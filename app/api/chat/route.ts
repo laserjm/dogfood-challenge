@@ -13,9 +13,9 @@ export const maxDuration = 30
 // - before the stream starts: an HTTP status with `{ error }` (below);
 // - after it started: an error chunk whose text comes from describeAiError.
 export async function POST(req: Request) {
-  const parsed = chats.sendMessageInput.safeParse(
-    await req.json().catch(() => null)
-  )
+  // The body can be read once; parse this value, don't call req.json() again.
+  const body = await req.json().catch(() => null)
+  const parsed = chats.chatRequestInput.safeParse(body)
   if (!parsed.success) {
     return errorResponse(
       400,
@@ -23,15 +23,22 @@ export async function POST(req: Request) {
     )
   }
 
+  const options = { model: chatModel(), describeError: describeAiError }
   try {
-    const stream = await chats.sendMessage(parsed.data, {
-      model: chatModel(),
-      describeError: describeAiError,
-    })
+    const stream =
+      parsed.data.type === "message"
+        ? await chats.sendMessage(parsed.data, options)
+        : await chats.continueAfterToolOutputs(parsed.data, options)
     return createUIMessageStreamResponse({ stream })
   } catch (error) {
     if (error instanceof chats.ChatNotFound) {
       return errorResponse(404, "This chat doesn't exist anymore.")
+    }
+    if (error instanceof chats.ToolOutputRejected) {
+      return errorResponse(
+        409,
+        "This chat changed in the meantime. Reload the page and try again."
+      )
     }
     console.error("[api/chat] request failed", error)
     return errorResponse(

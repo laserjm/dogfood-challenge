@@ -157,11 +157,11 @@ Eight stages, each ending in a working, committable state. AI enters the app onl
 
 **Build:** One server-side tool. Good options: `getCurrentTime(timezone)` (no dependencies) or `searchMyChats(query)` (reads your own DB, so it tests your access rules). Allow multiple steps so the model answers after the tool result. Render tool parts in the UI.
 
-- [ ] Asking a question that needs the tool triggers it and the model uses the result
-- [ ] The UI shows tool input, state and output distinctly from text
-- [ ] Reopening the chat still shows the tool call
-- [ ] A failing tool shows an error part instead of breaking the chat
-- [ ] Tool input is validated with a schema
+- [x] Asking a question that needs the tool triggers it and the model uses the result
+- [x] The UI shows tool input, state and output distinctly from text
+- [x] Reopening the chat still shows the tool call
+- [x] A failing tool shows an error part instead of breaking the chat
+- [x] Tool input is validated with a schema
 
 **Convention focus:** Where tools live, how they are named (`verbNoun`?), and whether a tool may call the data-access layer.
 

@@ -12,8 +12,11 @@ export const getChat = withUser(queries.getChat)
 export const createChat = withUser(commands.createChat)
 export const deleteChat = withUser(commands.deleteChat)
 export const sendMessage = withUser(commands.sendMessage)
+export const continueAfterToolOutputs = withUser(
+  commands.continueAfterToolOutputs
+)
 
-export { sendMessageInput } from "./contracts"
+export { chatRequestInput } from "./contracts"
 export type {
   ChatDetail,
   ChatErrorResponse,
@@ -21,4 +24,4 @@ export type {
   ChatMessage,
   SendMessageInput,
 } from "./contracts"
-export { ChatNotFound } from "./errors"
+export { ChatNotFound, ToolOutputRejected } from "./errors"
