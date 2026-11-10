@@ -1,4 +1,4 @@
-import type { UIDataTypes, UIMessage } from "ai"
+import type { UIDataTypes, UIMessage, UITools } from "ai"
 import { z } from "zod"
 
 // Boundary types of the chats module: what goes in, and what comes out.

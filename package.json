@@ -18,6 +18,7 @@
     "@ai-sdk/gateway": "4.0.136",
     "@ai-sdk/react": "4.0.167",
     "@base-ui/react": "^1.9.0",
+    "@shadcn/react": "^0.3.1",
     "ai": "7.0.163",
     "class-variance-authority": "^0.7.1",
     "cn": "^0.5.2",
