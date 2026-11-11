@@ -102,6 +102,7 @@ export function ChatProvider({
     messages: initialMessages,
     generateId,
     transport,
+    throttle: 100,
     onError: (error) => {
       console.error("[client] chat error", error)
     },
