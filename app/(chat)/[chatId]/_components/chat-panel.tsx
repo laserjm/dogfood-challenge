@@ -44,14 +44,8 @@ import {
   TraceLine,
   TraceTitle,
 } from "@/components/ui/trace"
+import { isStepPart, StepPart, textOf, ToolPart } from "./chat-parts"
 
-type ChatPart = ChatMessage["parts"][number]
-type ToolPart = Extract<
-  ChatPart,
-  { toolCallId: string; type: `tool-${string}` }
->
-type ReasoningPart = Extract<ChatPart, { type: "reasoning" }>
-type StepPart = ToolPart | ReasoningPart
 type AddToolOutput = ReturnType<typeof useChat<ChatMessage>>["addToolOutput"]
 
 export type ChatPanelProps = {
@@ -443,18 +437,6 @@ function describeTool(part: ToolPart) {
         done: part.input?.message ?? "Asked for confirmation",
       }
   }
-}
-
-function isStepPart(part: ChatPart): part is StepPart {
-  return part.type === "reasoning" || isStaticToolUIPart(part)
-}
-
-// Text parts of one message; steps between them are separate paragraphs.
-function textOf(message: ChatMessage): string {
-  return message.parts
-    .filter((part) => part.type === "text")
-    .map((part) => part.text)
-    .join("\n\n")
 }
 
 // Stand-in for a real location lookup. Outside the component, because the
