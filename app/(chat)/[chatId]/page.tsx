@@ -1,9 +1,9 @@
 import { notFound } from "next/navigation"
-import { ChatDeleteDialog } from "./_components/chat-delete-dialog"
+import { ChatDeleteDialog } from "@/components/chat/chat-delete-dialog"
 import * as chats from "@/modules/chats"
-import { ChatProvider } from "./_components/chat-provider"
-import { ChatForm } from "./_components/chat-form"
-import { ChatMessageList } from "./_components/chat-message-list"
+import { ChatProvider } from "@/components/chat/chat-provider"
+import { ChatForm } from "@/components/chat/chat-form"
+import { ChatMessageList } from "@/components/chat/chat-message-list"
 
 export default async function ChatPage(props: PageProps<"/[chatId]">) {
   const { chatId } = await props.params
