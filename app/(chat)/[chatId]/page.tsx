@@ -3,6 +3,7 @@ import { ChatDeleteDialog } from "./_components/chat-delete-dialog"
 import { ChatPanel } from "./_components/chat-panel"
 import * as chats from "@/modules/chats"
 import { ChatProvider } from "./_components/chat-provider"
+import { ChatForm } from "./_components/chat-form"
 
 export default async function ChatPage(props: PageProps<"/[chatId]">) {
   const { chatId } = await props.params
@@ -18,6 +19,7 @@ export default async function ChatPage(props: PageProps<"/[chatId]">) {
 
       <ChatProvider chatId={chatId} initialMessages={chat.messages}>
         <ChatPanel />
+        <ChatForm />
       </ChatProvider>
     </div>
   )
