@@ -1,12 +1,6 @@
 "use client"
 
-import { chatErrorResponse, type ChatMessage } from "@/modules/chats/contracts"
-import { useChat } from "@ai-sdk/react"
-import {
-  DefaultChatTransport,
-  isStaticToolUIPart,
-  lastAssistantMessageIsCompleteWithToolCalls,
-} from "ai"
+import { chatErrorResponse } from "@/modules/chats/contracts"
 import { useRef, useState } from "react"
 import { Streamdown } from "streamdown"
 import {
@@ -45,82 +39,20 @@ import {
   TraceTitle,
 } from "@/components/ui/trace"
 import { isStepPart, StepPart, textOf, ToolPart } from "./chat-parts"
+import { useChatActions, useChatState } from "./chat-provider"
 
-type AddToolOutput = ReturnType<typeof useChat<ChatMessage>>["addToolOutput"]
-
-export type ChatPanelProps = {
-  chatId: string
-  initialMessages: ChatMessage[]
-}
-
-export function ChatPanel({ chatId, initialMessages }: ChatPanelProps) {
-  const {
-    messages,
-    sendMessage,
-    regenerate,
-    addToolOutput,
-    status,
-    stop,
-    error,
-  } = useChat({
-    id: chatId,
-    messages: initialMessages,
-    generateId: () => crypto.randomUUID(),
-    transport: new DefaultChatTransport({
-      api: "/api/chat",
-      // Send only what is new; the server loads the history from the db.
-      prepareSendMessagesRequest: ({ id, messages }) => {
-        const last = messages.at(-1)
-        // An automatic resend after addToolOutput: the newest message is the
-        // assistant's, and what's new are the tool outputs on it.
-        if (last?.role === "assistant") {
-          return {
-            body: {
-              type: "tool-outputs",
-              chatId: id,
-              messageId: last.id,
-              outputs: last.parts
-                .filter(isStaticToolUIPart)
-                .filter((part) => part.state === "output-available")
-                .map((part) => ({
-                  toolCallId: part.toolCallId,
-                  output: part.output,
-                })),
-            },
-          }
-        }
-        return { body: { type: "message", chatId: id, message: last } }
-      },
-    }),
-    onError: (error) => {
-      console.error("[client] chat error", error)
-    },
-    sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,
-    // Client-side tools that run without asking the user.
-    async onToolCall({ toolCall }) {
-      if (toolCall.dynamic) return
-      if (toolCall.toolName === "getLocation") {
-        // No await: avoids a deadlock with the automatic resend.
-        addToolOutput({
-          tool: "getLocation",
-          toolCallId: toolCall.toolCallId,
-          output: pickCity(),
-        })
-      }
-    },
-  })
+export function ChatPanel() {
+  const { messages, status, error, busy } = useChatState()
+  const { send, stop, retry } = useChatActions()
 
   const [text, setText] = useState("")
   const formRef = useRef<HTMLFormElement>(null)
 
-  // "error" is not busy: the user must be able to retry or type again.
-  const busy = status === "submitted" || status === "streaming"
   const canSend = text.trim().length > 0 && !busy
 
   function onSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!canSend) return
-    sendMessage({ text })
     setText("")
   }
 
@@ -171,7 +103,6 @@ export function ChatPanel({ chatId, initialMessages }: ChatPanelProps) {
                           key={"toolCallId" in part ? part.toolCallId : index}
                           part={part}
                           streaming={streaming}
-                          addToolOutput={addToolOutput}
                         />
                       ))}
                     </Trace>
@@ -208,13 +139,11 @@ export function ChatPanel({ chatId, initialMessages }: ChatPanelProps) {
               className="flex flex-col items-start gap-2 text-sm text-destructive"
             >
               <p>{readableError(error)}</p>
-              {/* Resends the last user message with the same id: the server
-                  stores it once (onConflictDoNothing), so no duplicate. */}
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
-                onClick={() => regenerate()}
+                onClick={() => retry()}
               >
                 Try again
               </Button>
@@ -252,7 +181,7 @@ export function ChatPanel({ chatId, initialMessages }: ChatPanelProps) {
                   size="icon-sm"
                   variant="default"
                   className="rounded-full"
-                  onClick={() => stop()}
+                  onClick={stop}
                   aria-label="Stop"
                 >
                   <SquareIcon className="fill-current" />
@@ -277,15 +206,7 @@ export function ChatPanel({ chatId, initialMessages }: ChatPanelProps) {
   )
 }
 
-function StepRow({
-  part,
-  streaming,
-  addToolOutput,
-}: {
-  part: StepPart
-  streaming: boolean
-  addToolOutput: AddToolOutput
-}) {
+function StepRow({ part, streaming }: { part: StepPart; streaming: boolean }) {
   if (part.type === "reasoning") {
     return (
       <ReasoningRow text={part.text} running={part.state === "streaming"} />
@@ -295,7 +216,7 @@ function StepRow({
     part.type === "tool-askForConfirmation" &&
     part.state === "input-available"
   ) {
-    return <ConfirmationRow part={part} addToolOutput={addToolOutput} />
+    return <ConfirmationRow part={part} />
   }
   return <ToolRow part={part} streaming={streaming} />
 }
@@ -327,17 +248,10 @@ function ReasoningRow({ text, running }: { text: string; running: boolean }) {
 
 function ConfirmationRow({
   part,
-  addToolOutput,
 }: {
   part: Extract<ToolPart, { type: "tool-askForConfirmation" }>
-  addToolOutput: AddToolOutput
 }) {
-  const answer = (output: string) =>
-    addToolOutput({
-      tool: "askForConfirmation",
-      toolCallId: part.toolCallId,
-      output,
-    })
+  const { answerConfirmation } = useChatActions()
 
   return (
     <div className="flex flex-col gap-2">
@@ -348,13 +262,16 @@ function ConfirmationRow({
         <TraceTitle>{part.input?.message}</TraceTitle>
       </TraceLine>
       <div className="flex gap-2">
-        <Button size="sm" onClick={() => answer("Yes, confirmed.")}>
+        <Button
+          size="sm"
+          onClick={() => answerConfirmation(part.toolCallId, true)}
+        >
           Yes
         </Button>
         <Button
           size="sm"
           variant="outline"
-          onClick={() => answer("No, denied")}
+          onClick={() => answerConfirmation(part.toolCallId, false)}
         >
           No
         </Button>
@@ -438,11 +355,6 @@ function describeTool(part: ToolPart) {
       }
   }
 }
-
-// Stand-in for a real location lookup. Outside the component, because the
-// React Compiler treats Math.random inside it as an impure render.
-const CITIES = ["New York", "Los Angeles", "Chicago", "San Francisco"]
-const pickCity = () => CITIES[Math.floor(Math.random() * CITIES.length)]
 
 const FALLBACK = "Something went wrong. Try again in a moment."
 

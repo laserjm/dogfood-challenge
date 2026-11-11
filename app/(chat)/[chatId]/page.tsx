@@ -2,6 +2,7 @@ import { notFound } from "next/navigation"
 import { ChatDeleteDialog } from "./_components/chat-delete-dialog"
 import { ChatPanel } from "./_components/chat-panel"
 import * as chats from "@/modules/chats"
+import { ChatProvider } from "./_components/chat-provider"
 
 export default async function ChatPage(props: PageProps<"/[chatId]">) {
   const { chatId } = await props.params
@@ -15,7 +16,9 @@ export default async function ChatPage(props: PageProps<"/[chatId]">) {
         {chat.canDelete && <ChatDeleteDialog chatId={chatId} />}
       </header>
 
-      <ChatPanel chatId={chatId} initialMessages={chat.messages} />
+      <ChatProvider chatId={chatId} initialMessages={chat.messages}>
+        <ChatPanel />
+      </ChatProvider>
     </div>
   )
 }
