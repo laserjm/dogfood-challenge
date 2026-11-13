@@ -25,9 +25,17 @@ Extend this list rather than inventing a role. Unexported helpers are free-form 
 don't mimic `*Action`, `*Page` or a verb-first use-case name. `components/ui/*` is shadcn: don't
 rename it, don't add your own components there.
 
-A component lives as close to its use as it can: route-local in `_components/`; shared across
-route groups and belonging to a module's concept in `components/<module>/` (`components/chats/chat-list.tsx`);
-other shared UI flat in `components/`. The file and identifier patterns are the same in all three.
+A component lives as close to its use as it can, in one of two places:
+
+- **One route group renders it:** the `_components/` of the nearest folder above every page that
+  renders it. One page: `app/(chat)/[chatId]/_components/`; several pages of the group:
+  `app/(chat)/_components/`.
+- **More than one route group renders it:** flat in `components/`. The noun prefix groups related
+  files (`components/chat-list.tsx`, `components/chat-list-skeleton.tsx`).
+
+`components/` has no subfolders besides `ui/`, and none is named after a module: a module holds no
+UI. A component moves to `components/` when a second route group renders it, and back when only
+one is left. The file and identifier patterns are the same in both places.
 
 ## Data
 
