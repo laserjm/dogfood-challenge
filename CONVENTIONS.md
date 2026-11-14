@@ -96,8 +96,7 @@ modules/<x>/              # one concept each (e.g. chats); created on a promotio
 ├─ repo.ts                # db queries shared by reads and writes (the ownership check) (on need)
 ├─ mappers.ts             # row ⇄ DTO (on need)
 └─ errors.ts              # domain error classes (on need)
-components/               # shared UI; components/ui/* is shadcn, untouched
-├─ <x>/                   # UI for module <x> that more than one route group renders
+components/               # UI more than one route group renders, flat; components/ui/* is shadcn, untouched
 lib/
 ├─ auth.ts                # getUser / requireUser (cache()), withUser
 ├─ env.ts                 # validated env; the only reader of process.env
@@ -295,6 +294,11 @@ condition is met, proposing the dropped thing again is not an improvement.
   plus a browser-safe `contracts.ts` gives the same guarantee with one file fewer.
 - **Cache tags, cross-module events, branded ids.** Not until `cacheComponents` is on, a second
   subscriber exists, or a swapped-argument bug slips past Testing §5.
+- **A `components/<module>/` folder.** It read as the module's UI layer, though a module holds no
+  UI; nobody could say when a component went there rather than into `_components/` or flat
+  `components/`; and the one this app had was rendered by a single page. A component sits in the
+  nearest `_components/`, or flat in `components/` once two route groups render it. Revisit when
+  flat `components/` holds so many files of one noun that it no longer scans.
 
 ## Examples
 
