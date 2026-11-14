@@ -1,9 +1,10 @@
-<!-- conventions 0.6.0 -->
+<!-- conventions 0.7.0 -->
 
 # Conventions
 
 How a Next.js app on Drizzle, Postgres and zod is organized, and when a route grows into a
-module. Rules that lint enforces are only pointed at here; the project's `eslint.config.mjs` is the source of truth for the import graph.
+module. Rules that lint enforces are only pointed at here; the project's `eslint.config.mjs` is the
+source of truth for the import graph, and `eslint.project.mjs` holds what the project adds to it.
 
 ## How to read this
 
@@ -25,9 +26,9 @@ folder that holds the Next.js app's `package.json`: the repository root in a sin
 repository, `apps/<app>/` in a monorepo. This file and NAMING.md sit in `docs/` there.
 
 **Unproven.** Some parts are carried over from earlier projects, and no app has exercised them
-yet: `app/api/system/`, one module calling another (Rule 6, hard trigger 3, the shared
-transaction), `scripts/` calling a use case instead of writing rows, `policy.ts` and the
-`Forbidden` row, `lib/db/errors.ts` and the `<Fact>` errors it feeds, `domain.ts`, and UI tests.
+yet: `app/api/system/`, the shared transaction of hard trigger 3, `scripts/` calling a use case
+instead of writing rows, `policy.ts` and the `Forbidden` row, `domain.ts`, a module's variant
+folders, and UI tests.
 If one of them doesn't fit the first project that needs it, that is a finding about the rule, not
 a deviation: challenge it (Changing this document).
 
@@ -95,9 +96,11 @@ app/
 │  │  ├─ queries.ts       # reads: requireUser() → db → DTO
 │  │  └─ actions.ts       # 'use server' writes: requireUser() → parse → db → revalidate/redirect
 │  ├─ actions.ts          # module-backed route only: 'use server' adapter, parse → module → map errors → revalidate/redirect
+│  ├─ refusals.ts         # module-backed route only: the copy each module error answers with; plain functions
 │  └─ _components/        # render; a server component may await a query, never the db
 ├─ api/
 │  ├─ <x>/route.ts        # route handler for the signed-in user: adapter, parse → module → respond/stream
+│  ├─ <x>/refusals.ts     # the status and { error } each module error answers with
 │  └─ system/<x>/route.ts # webhook or cron: verifies a secret, not a session; names the requester it acts for
 modules/<x>/              # one concept each (e.g. chats); created on a promotion trigger
 ├─ index.ts               # session-bound API for app/: binds the current user (withUser), re-exports errors
@@ -108,8 +111,10 @@ modules/<x>/              # one concept each (e.g. chats); created on a promotio
 ├─ policy.ts              # authorization beyond "the owner can"; pure functions (on trigger)
 ├─ repo.ts                # db queries shared by reads and writes (the ownership check) (on need)
 ├─ mappers.ts             # row ⇄ DTO (on need)
-└─ errors.ts              # domain error classes (on need)
-components/               # UI more than one route group renders, flat; components/ui/* is shadcn, untouched
+├─ errors.ts              # domain error classes and their list (on need)
+├─ tools.ts               # the tools the module offers an agent (on need)
+└─ <variants>/<id>/       # one implementation of an interface the module owns, e.g. providers/github/ (on need)
+components/               # UI more than one route group renders; components/ui/* is shadcn, untouched
 lib/
 ├─ auth.ts                # getUser / requireUser (cache()), withUser
 ├─ env.ts                 # validated env; the only reader of process.env
@@ -121,12 +126,24 @@ scripts/                  # seed and maintenance: system callers (optional)
 A route is in one of two states, and the folder shows which: `_lib/` means the route talks to the
 db itself; a bare `actions.ts` next to `page.tsx` means a module does.
 
-A module starts as `index.ts`, `contracts.ts`, `queries.ts` and `commands.ts`. Every other file
-appears when its content does.
+A module has `contracts.ts` and the doors its callers use: `index.ts` once `app/` calls it,
+`queries.ts` once it reads, `commands.ts` once it writes. Every other file appears when its content
+does; an empty file or an export nobody calls is structure ahead of its trigger.
+
+A module that holds several implementations of one interface it owns (a provider per external
+system) gives each its own folder, `<variants>/<id>/`. The interface is `<variant>.ts`, the
+registry that lists the implementations `<variants>.ts`; outside its folder an implementation is
+reached only through the registry. What the browser reads of one implementation is in its own
+`contracts.ts`, which is browser-safe like the module's and may build on it.
 
 ### Dependencies
 
-Lint enforces all of these, so a departure shows up as an `eslint-disable` with its ADR link.
+Lint enforces all of these, so a departure shows up as an `eslint-disable` with its ADR link. A
+boundary the project adds (one module never imports another, only one folder imports a library)
+goes into `eslint.project.mjs` with a rule the conventions leave free, such as
+`import/no-restricted-paths` or `no-restricted-syntax`. `eslint.config.mjs` refuses to load a
+project block that sets one of its own rules: a later block replaces that rule's options instead of
+adding to them, and would switch the conventions' check off for the same files.
 
 - **Rule 3. Only `_lib/*`, `modules/*` and `lib/` import the db.** Outside the app, `test/`
   (setup, factories) and seed scripts do too. _Lint._
@@ -138,19 +155,24 @@ Lint enforces all of these, so a departure shows up as an `eslint-disable` with 
 - **Rule 5. Dependencies point one way.** `lib/` imports neither `app/` nor `modules/`; `modules/`
   imports neither `app/` nor `next/*`. Two modules that import each other are merged, or a third
   is extracted. _Lint, cycles by review._
-- **Rule 6. Three doors into a module, and no others.**
+- **Rule 6. Four doors into a module, and no others.**
   - `app/` imports `index.ts` as a namespace (`import * as chats from "@/modules/chats"`): the
-    session-bound API. `index.ts` also re-exports the module's error classes, so an adapter can
-    map them (`chats.ChatNotFound`).
+    session-bound API. `index.ts` also re-exports the module's error classes, their list and its
+    guard, so an adapter can map them (`chats.isChatError`, `chats.ChatNotFound`).
   - Other modules, system callers (`scripts/`, `app/api/system/`) and tests import `queries.ts`,
-    `commands.ts` and `errors.ts` directly and pass the requester they act for. Never `index.ts`,
-    which would bind the session; never `repo.ts` or `mappers.ts`.
+    `commands.ts` and `errors.ts` directly and pass the requester they act for, and may import
+    `contracts.ts` for its schemas and types. Never `index.ts`, which would bind the session, and
+    no other file of the module.
   - UI, client components included, imports `contracts.ts` for input schemas and DTO types, so a
     form validates with the same schema the action parses.
-    `contracts.ts` itself imports nothing but zod and types, so it can't drag the server into the
-    bundle.
+    `contracts.ts` itself imports nothing but zod, types and another `contracts.ts`, so it can't
+    drag the server into the bundle. A variant folder's `contracts.ts` is the same door.
+  - An agent module (one that runs a model's tool loop) imports another module's `tools.ts`: the
+    tools that module offers the model, next to the code that answers them. Nothing else imports a
+    `tools.ts`, and a tool's `execute` takes the requester from the context the server fills,
+    never from the model.
 
-  _Lint._
+  _Lint; who imports a `tools.ts`, review._
 
 - **Rule 8. No `as` cast** outside `mappers.ts`, `lib/db/` and `as const`. If the types don't line
   up, fix the schema or add a mapper. `components/ui/*` is vendor code and exempt. _Lint._
@@ -179,8 +201,8 @@ parses its own ids (`contracts.ts`); queries return `null`, commands throw a dom
 rules get their own file as soon as one is needed twice or deserves a unit test: `domain.ts` for
 calculations and state transitions, `policy.ts` for authorization beyond "the owner can". The
 route keeps a thin `actions.ts` next to `page.tsx` as the `'use server'` boundary: parse → module →
-map domain errors → `revalidatePath` / `redirect`. Pages and server components call the module
-directly; `_lib/` is deleted.
+map domain errors (`refusals.ts`) → `revalidatePath` / `redirect`. Pages and server components
+call the module directly; `_lib/` is deleted.
 
 **Data in components.** A server component in `_components/` may await a query it owns (e.g. the
 sidebar's chat list), wrapped in `<Suspense>` next to it. Client components get data as props or a
@@ -202,7 +224,25 @@ the UI sees an error class.
 
 - Until `policy.ts` exists, "not owned" is "not found" by design (Rule 2); `Forbidden` arrives
   with hard trigger 4.
-- `{ error }` holds copy the user can read (`useActionState`), never a class name or a tag.
+- `{ error }` holds copy the user can read (`useActionState`), never a class name or a tag. It may
+  carry flags its caller acts on: the field the copy is about, that the thing no longer exists.
+- An action the browser calls from client state (an event handler, an optimistic update; not a
+  `<form>` on a page that renders server state) answers `{ error }` where the table says
+  `notFound()` or `forbidden()`. A bug still throws; the caller catches the rejected call, shows a
+  generic line and undoes its optimistic change. `notFound()` and `error.tsx` would replace the
+  page and throw away the state the browser holds.
+- **Every error is mapped, and the compiler checks it.** Each class in `errors.ts` has a literal
+  name (`override readonly name = "ChatNotFound"`), and the file exports the list of its classes,
+  their union and a guard (`chatErrors`, `ChatError`, `isChatError`). An adapter maps a module's
+  errors with a `switch` on `error.name` that ends in a `never` check, so a new class fails to
+  compile until every adapter has said what it means; what is not the module's is rethrown as a
+  bug. The list is per module, not per use case: an adapter also names the errors none of its
+  calls throws, and answers them as a bug. _tsc, plus Testing §7._
+- **The mapping is a plain file next to the adapter.** `refusals.ts` beside `actions.ts` or
+  `route.ts` holds a `<noun>Refusal(error)` per module: the copy, or the status and `{ error }`,
+  for each of its errors. It imports no `next/*`, so a test checks every case without Next, and it
+  is not in `actions.ts`, whose every export the browser can call; `actions.ts` exports only
+  actions. The adapter stays parse → module → refusal → revalidate/redirect. _Review._
 - A route handler answers JSON `{ error }` on every status, `404` and `500` included: `notFound()`
   would render the HTML page.
 - When a module must produce user-facing text itself, as in an error chunk after a stream has
@@ -249,8 +289,8 @@ triggers: "it might be reused later", many small actions in one file, a cleaner 
 | Level      | Self-contained route                       | Module-backed route                                             |
 | ---------- | ------------------------------------------ | --------------------------------------------------------------- |
 | API tests  | none (would need Next; see soft trigger 6) | every use case in `queries.ts` and `commands.ts`, real Postgres |
-| Unit tests | business-critical pure functions only      | `domain.ts` and `policy.ts`, by example tables                  |
-| UI tests   | business-critical workflows only, E2E      | same; the only coverage adapters in `app/` get                  |
+| Unit tests | business-critical pure functions only      | `domain.ts`, `policy.ts` and `refusals.ts`, by example tables   |
+| UI tests   | business-critical workflows only, E2E      | same; the only coverage the rest of an adapter gets             |
 
 > **TODO:** confirm the definition of "business critical". Draft: it moves money, changes who may
 > access what, or can't be undone.
@@ -271,7 +311,11 @@ triggers: "it might be reused later", many small actions in one file, a cleaner 
    `null` or throws, and changes nothing) and a malformed-id case next to its happy path. This one
    is part of the floor.
 6. **Never mock `next/*`.** A test that needs Next means the logic sits in the adapter and belongs
-   in the module.
+   in the module, or, for copy and statuses, in the adapter's `refusals.ts`.
+7. **Every error is in its list, and every refusal is tested.** `test/errors.test.ts` (from the
+   conventions' `templates/errors.test.ts`) checks that each `errors.ts` lists every class it
+   exports, each named after itself. `refusals.test.ts` next to a `refusals.ts` has a case per
+   error class: the copy or status it answers, and that anything else is rethrown.
 
 ```bash
 createdb <app>_test   # once, on the local Postgres
@@ -297,23 +341,30 @@ condition is met, proposing the dropped thing again is not an improvement.
   starts constructing users.
 - **A "who may import what" table here.** It drifted; `eslint.config.mjs` is the table.
 - **`index.ts` as a public API before `modules/` exists.** A self-contained route has none.
+- **Every module starting with `index.ts`, `queries.ts` and `commands.ts`.** An `index.ts` nobody
+  imports binds the session for nothing, and an empty `commands.ts` says the module writes when it
+  doesn't. A module has the doors its callers use (Layout); lint refuses `app/` reaching past
+  `index.ts`, so a missing one shows the day an adapter needs it.
 - **Full module layering from day one.** `domain/`, `application/`, `infra/` folders and ports
   are correct and too heavy for a route that owns one table. Flat files, promoted on trigger.
-- **`Result` types and tagged error unions.** Thrown classes mapped in the adapter are the
-  TypeScript default and cost no runtime package. The price is exhaustiveness: a forgotten
-  `instanceof` is a 500, not a compile error. Testing §5 proves the command throws; that the adapter maps it is seen
-  only by an E2E test. Accepted while an adapter stays as thin as parse → module → map.
+- **`Result` types and tagged error unions for our own refusals.** Thrown classes mapped in the
+  adapter are the TypeScript default and cost no runtime package. The price `Result` would avoid,
+  exhaustiveness, is paid instead by each `errors.ts` listing its classes and the adapter's
+  `never` check (Errors). Revisit if an adapter has to know which errors one use case throws, not
+  just its module. An answer a remote system gives (a refusal the user or a model is shown) is
+  data the code returns, not an error, and is open territory.
 - **A separate browser-safe `index.ts` and server-only `server.ts`.** One server-only `index.ts`
   plus a browser-safe `contracts.ts` gives the same guarantee with one file fewer.
 - **Cache tags, cross-module events, branded ids.** Not until `cacheComponents` is on, a second
   subscriber exists, or a swapped-argument bug slips past Testing §5.
 - **File length as a promotion trigger.** A long file of small use cases reads fine; length that
   comes from logic shows up in one function first. Soft trigger 5 measures that function.
-- **A `components/<module>/` folder.** It read as the module's UI layer, though a module holds no
-  UI; nobody could say when a component went there rather than into `_components/` or flat
-  `components/`; and the one this app had was rendered by a single page. A component sits in the
-  nearest `_components/`, or flat in `components/` once two route groups render it. Revisit when
-  flat `components/` holds so many files of one noun that it no longer scans.
+- **A `components/<module>/` folder as a third place for UI.** It read as the module's UI layer,
+  though a module holds no UI; nobody could say when a component went there rather than into
+  `_components/` or flat `components/`; and the one this app had was rendered by a single page. A
+  component sits in the nearest `_components/`, or in `components/` once two route groups render
+  it. A folder that no longer scans flat is grouped by the noun its components render
+  (NAMING.md), which keeps that placement.
 
 ## Examples
 
@@ -349,13 +400,60 @@ once, and the page never mentions a user.
 // modules/chats/index.ts
 export const getChat = withUser(queries.getChat)
 export const deleteChat = withUser(commands.deleteChat)
-export { ChatNotFound } from "./errors"
+export { ChatNotFound, TitleTaken, isChatError } from "./errors"
 
 // app/(chat)/[id]/page.tsx
 import * as chats from "@/modules/chats"
 
 const chat = await chats.getChat(id)
 if (!chat) notFound()
+```
+
+A module's errors and the adapter that maps them: a literal name per class, one list, and a
+`switch` the compiler checks, so a new class doesn't build until the adapter has its copy.
+
+```ts
+// modules/chats/errors.ts
+import "server-only"
+
+export class ChatNotFound extends Error {
+  override readonly name = "ChatNotFound"
+  constructor(readonly chatId: string) {
+    super(`Chat ${chatId} not found`)
+  }
+}
+export class TitleTaken extends Error {
+  override readonly name = "TitleTaken"
+  constructor(readonly title: string) {
+    super(`Title ${title} is taken`)
+  }
+}
+
+export const chatErrors = [ChatNotFound, TitleTaken] as const
+export type ChatError = InstanceType<(typeof chatErrors)[number]>
+export function isChatError(error: unknown): error is ChatError {
+  return chatErrors.some((type) => error instanceof type)
+}
+
+// app/(chat)/refusals.ts
+import "server-only"
+import * as chats from "@/modules/chats"
+
+export function chatRefusal(error: unknown): { error: string } {
+  if (!chats.isChatError(error)) throw error
+  switch (error.name) {
+    case "ChatNotFound":
+      return { error: "This chat no longer exists." }
+    case "TitleTaken":
+      return { error: `You already have a chat called ${error.title}.` }
+    default:
+      return unmapped(error)
+  }
+}
+
+function unmapped(error: never): never {
+  throw error
+}
 ```
 
 ## Open territory
@@ -398,8 +496,9 @@ removed rule gets a bullet in Deliberately dropped, so the question is not reope
 
 - `NAMING.md`: file and identifier patterns per kind, component roles.
 - `eslint.config.mjs`: the import graph, `server-only`, `'use server'`, casts, `process.env`, what
-  a module may import from `lib/`.
+  a module may import from `lib/`. `eslint.project.mjs`: the boundaries the project adds.
 - `docs/adr/`: every decision that interprets or
   deviates from a rule, with the options considered and how to reverse it.
-- `test/global-setup.ts`, `test/factories.ts`: test database and fixtures.
+- `test/global-setup.ts`, `test/factories.ts`: test database and fixtures. `test/errors.test.ts`:
+  every module error is in its list.
 - `lib/db/errors.ts`: the one place that knows the driver's error codes.

@@ -1,4 +1,4 @@
-<!-- conventions 0.6.0 -->
+<!-- conventions 0.7.0 -->
 
 # Naming
 
@@ -14,30 +14,51 @@ or rename a file or an export.
 | Command              | `modules/<x>/commands.ts`                                                | the use case's name, same binding                                                                                                        | `deleteChat(requester, id)` → `chats.deleteChat(id)`      |
 | Domain rule          | `modules/<x>/domain.ts`, `policy.ts`                                     | a business verb or predicate, pure                                                                                                       | `applyCredits(chat, amount)`, `canShare(requester, chat)` |
 | Input contract (zod) | `contracts.ts`                                                           | `<useCase>Input`; inferred type `<UseCase>Input`                                                                                         | `sendMessageInput`, `SendMessageInput`                    |
-| Error class          | `errors.ts`                                                              | the fact that blocks the action                                                                                                          | `ChatNotFound`, `TitleTaken`                              |
+| Error class          | `errors.ts`                                                              | the fact that blocks the action; `override readonly name` is the class name                                                              | `ChatNotFound`, `TitleTaken`                              |
+| Error list           | `errors.ts`                                                              | `<noun>Errors`, union `<Noun>Error`, guard `is<Noun>Error`                                                                               | `chatErrors`, `ChatError`, `isChatError`                  |
+| Refusal              | `refusals.ts` next to `actions.ts` or `route.ts`                         | `<noun>Refusal(error)`, one per module it maps                                                                                           | `chatRefusal(error)`                                      |
+| Agent tool           | `modules/<x>/tools.ts`                                                   | `<noun>Tools`; the tool's own name is `snake_case` and never renamed once conversations store it                                         | `recordTools`, `search_records`                           |
 | Component            | `components/<noun>-<role>.tsx`, or `app/.../_components/` if route-local | `<Noun><Role>`, props `<Component>Props`; client components start with `'use client'`, no suffix                                         | `ChatList`, `ChatListProps`                               |
 | Hook                 | `hooks/use-<thing>.ts`, or `_components/` if route-local                 | `use<Thing>`                                                                                                                             | `useIsMobile`                                             |
 | Page                 | `page.tsx`                                                               | `<Noun>Page` / `<Nouns>Page`                                                                                                             | `ChatPage`, `ChatsPage`                                   |
 
 Roles (last word of a component name): `List`, `Table`, `Card`, `Row`, `Form`, `Dialog`, `Sheet`,
 `Panel`, `Badge`, `Summary`, `Picker`, `Select`, `Filters`, `Toolbar`, `Empty`, `Provider`, or any
-name from the [shadcn components list](https://ui.shadcn.com/docs/components.md). The noun may be
-`App` for shell pieces (`AppSidebar`); a role may stack to describe a state (`ChatListSkeleton`).
-Extend this list rather than inventing a role. Unexported helpers are free-form as long as they
-don't mimic `*Action`, `*Page` or a verb-first use-case name. `components/ui/*` is shadcn: don't
-rename it, don't add your own components there.
+name from the [shadcn components list](https://ui.shadcn.com/docs/components.md), and:
+
+| Role      | What it is                                                                   | Example           |
+| --------- | ---------------------------------------------------------------------------- | ----------------- |
+| `Icon`    | a glyph                                                                      | `ProjectIcon`     |
+| `Chip`    | a compact token for one thing inside a sentence or an input, often removable | `RecordChip`      |
+| `View`    | the body of one thing that a `Panel` or `Dialog` frames                      | `IssueView`       |
+| `Section` | a titled part inside a view                                                  | `CommentsSection` |
+| `Frame`   | a sandboxed `iframe` and what it hosts                                       | `PreviewFrame`    |
+| `Shell`   | a page's outermost layout: sidebar, main area, dialogs                       | `WorkspaceShell`  |
+
+A component that renders one kind of content is named for the content alone (`Markdown`,
+`CodeBlock`, `MermaidDiagram`). The noun may be `App` for shell pieces (`AppSidebar`); a role may
+stack to describe a state (`ChatListSkeleton`). A role the list lacks is decided in an ADR and
+challenged (CONVENTIONS.md, Changing this document), not invented silently. Unexported helpers are
+free-form as long as they don't mimic `*Action`, `*Page` or a verb-first use-case name.
+`components/ui/*` is shadcn: don't rename it, don't add your own components there.
 
 A component lives as close to its use as it can, in one of two places:
 
 - **One route group renders it:** the `_components/` of the nearest folder above every page that
   renders it. One page: `app/(chat)/[chatId]/_components/`; several pages of the group:
   `app/(chat)/_components/`.
-- **More than one route group renders it:** flat in `components/`. The noun prefix groups related
+- **More than one route group renders it:** in `components/`. The noun prefix groups related
   files (`components/chat-list.tsx`, `components/chat-list-skeleton.tsx`).
 
-`components/` has no subfolders besides `ui/`, and none is named after a module: a module holds no
-UI. A component moves to `components/` when a second route group renders it, and back when only
-one is left. The file and identifier patterns are the same in both places.
+A component moves to `components/` when a second route group renders it, and back when only one
+is left. The file and identifier patterns are the same in both places.
+
+Both folders are flat until they no longer scan: when one holds many files of several nouns, it is
+grouped one level deep by the noun a component renders (`_components/threads/thread-row.tsx`,
+`_components/records/record-panel.tsx`). A component that renders several nouns, or none (the
+shell, a shared button), stays at the root. A noun folder may share a module's name; it is still
+the route's UI, not the module's, because a module holds no UI. Besides noun folders,
+`components/` has only `ui/`.
 
 ## Data
 
