@@ -1,3 +1,5 @@
+<!-- conventions 0.5.0 -->
+
 # Conventions
 
 How a Next.js app on Drizzle, Postgres and zod is organized, and when a route grows into a
@@ -17,6 +19,13 @@ The sections bind differently. Only the floor can be violated.
 
 Rule, trigger and Testing § numbers are ids, not an order: the lint config, the ADRs and the
 changelog cite them, so they keep their number wherever the rule sits.
+
+**Unproven.** Some parts are carried over from earlier projects, and no app has exercised them
+yet: `app/api/system/`, one module calling another (Rule 6, hard trigger 3, the shared
+transaction), `scripts/` calling a use case instead of writing rows, `policy.ts` and the
+`Forbidden` row, `lib/db/errors.ts` and the `<Fact>` errors it feeds, `domain.ts`, and UI tests.
+If one of them doesn't fit the first project that needs it, that is a finding about the rule, not
+a deviation: change it in this file.
 
 ## Why
 
@@ -221,8 +230,8 @@ triggers: "it might be reused later", many small actions in one file, a cleaner 
 
 **Soft triggers (two together):**
 
-5. **`actions.ts` or `queries.ts` passes about 200 lines, or one function about 40.** Length from
-   logic counts; length from the number of use cases doesn't.
+5. **One function in `actions.ts` or `queries.ts` passes about 40 lines.** A file that is long
+   because it holds many small use cases is not a trigger.
 6. **A business rule shares a function with the framework.** A calculation or a state
    transition, logic with more than one outcome, sits next to `requireUser` or `revalidatePath`,
    so a unit test would need Next.
@@ -294,6 +303,8 @@ condition is met, proposing the dropped thing again is not an improvement.
   plus a browser-safe `contracts.ts` gives the same guarantee with one file fewer.
 - **Cache tags, cross-module events, branded ids.** Not until `cacheComponents` is on, a second
   subscriber exists, or a swapped-argument bug slips past Testing §5.
+- **File length as a promotion trigger.** A long file of small use cases reads fine; length that
+  comes from logic shows up in one function first. Soft trigger 5 measures that function.
 - **A `components/<module>/` folder.** It read as the module's UI layer, though a module holds no
   UI; nobody could say when a component went there rather than into `_components/` or flat
   `components/`; and the one this app had was rendered by a single page. A component sits in the
