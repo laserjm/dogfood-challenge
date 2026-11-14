@@ -1,3 +1,5 @@
+<!-- conventions 0.5.0 -->
+
 # Naming
 
 The lookup tables for [CONVENTIONS.md](./CONVENTIONS.md), Defaults → Naming. Read this when you create
