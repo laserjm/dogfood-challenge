@@ -1,4 +1,4 @@
-<!-- conventions 0.5.0 -->
+<!-- conventions 0.6.0 -->
 
 # Naming
 
