@@ -22,7 +22,12 @@ export default defineConfig({
   },
   test: {
     environment: "node",
-    include: ["modules/**/*.test.ts", "lib/**/*.test.ts"],
+    include: [
+      "app/**/*.test.ts",
+      "lib/**/*.test.ts",
+      "modules/**/*.test.ts",
+      "test/**/*.test.ts",
+    ],
     globalSetup: ["./test/global-setup.ts"],
     // Wins over .env.local: dotenv never overrides a variable that is already set.
     env: { DATABASE_URL: TEST_DATABASE_URL },

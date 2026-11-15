@@ -1,6 +1,8 @@
 import { defineConfig, globalIgnores } from "eslint/config"
 import nextVitals from "eslint-config-next/core-web-vitals"
 import nextTs from "eslint-config-next/typescript"
+// The project's own boundaries. The project owns that file; a rollout never overwrites it.
+import project from "./eslint.project.mjs"
 
 // Local rule: file must start with `import 'server-only'`.
 // Used for files that touch the db or auth so they can never end up in a client bundle.
@@ -61,18 +63,21 @@ const noDbInUi = {
   message:
     "Pages and components never import the db. Put the read in `_lib/queries.ts` or the write in `_lib/actions.ts`.",
 }
+// A regex, not a glob: a glob can't re-include a file below a folder it excludes, so it can't
+// allow a variant folder's `contracts.ts` (`@/modules/<x>/<variants>/<id>/contracts`).
 const moduleViaIndex = {
-  group: ["@/modules/*/*", "!@/modules/*/contracts"],
+  regex: "^@/modules/[^/]+/(?!(?:[^/]+/)*contracts$).+",
   message:
-    "Import a module through its index.ts (`@/modules/<x>`); only `contracts.ts` (schemas, DTO types) may be imported directly.",
+    "Import a module through its index.ts (`@/modules/<x>`); only a `contracts.ts` (schemas, DTO types) may be imported directly.",
 }
 // Rule 6: callers that bring their own requester (other modules, system handlers, scripts)
-// use queries.ts/commands.ts/errors.ts directly. index.ts would bind the session; repo/mappers are internal.
-// A regex, not a glob: a glob on `@/modules/*` would also cover `@/modules/<x>/commands`.
+// use the doors queries.ts, commands.ts, errors.ts, contracts.ts and, for an agent, tools.ts.
+// Anything else is refused: index.ts would bind the session, every other file is internal.
 const noSessionBoundModule = {
-  regex: "^@/modules/[^/]+(/index|/repo|/mappers)?$",
+  regex:
+    "^@/modules/(?![^/]+/(?:queries|commands|errors|tools|(?:[^/]+/)*contracts)$)",
   message:
-    "Pass the requester you act for: import `@/modules/<x>/queries`, `/commands` or `/errors`, never index.ts (binds the session) or repo/mappers.",
+    "Pass the requester you act for: import `@/modules/<x>/queries`, `/commands`, `/errors`, `/contracts` or `/tools`, never index.ts (binds the session) or a module's internal files.",
 }
 const noDbInActionAdapter = {
   group: noDbInUi.group,
@@ -104,11 +109,7 @@ const noRouteLibInApi = {
     "Route handlers never import a route's `_lib`, `actions.ts` or `_components`. Shared logic lives in `@/modules/<x>`.",
 }
 
-const eslintConfig = defineConfig([
-  ...nextVitals,
-  ...nextTs,
-  globalIgnores([".next/**", "out/**", "build/**", "next-env.d.ts"]),
-
+const conventions = defineConfig([
   // Rule 3: only `_lib/*`, `lib/` and `modules/` may import the db; outside the app, test/ and
   // scripts/ do too (they are not matched below). `_lib` may import the db, but modules only
   // through their index.ts.
@@ -186,6 +187,7 @@ const eslintConfig = defineConfig([
     files: [
       "app/**/_lib/**",
       "app/**/actions.ts",
+      "app/**/refusals.ts",
       "app/api/**",
       "lib/db/**",
       "lib/auth.ts",
@@ -196,7 +198,7 @@ const eslintConfig = defineConfig([
     ignores: [
       "lib/db/migrations/**",
       "lib/db/schema.ts",
-      "modules/*/contracts.ts",
+      "modules/**/contracts.ts",
       "**/*.test.ts",
     ],
     plugins: { local: localPlugin },
@@ -345,11 +347,12 @@ const eslintConfig = defineConfig([
     },
   },
 
-  // Rule 6, third door: contracts.ts reaches the browser, so it imports only zod and types.
-  // This block replaces the auth-type block above for contracts.ts (flat config does not merge
-  // options); `@/*` covers `@/lib/auth` as well.
+  // Rule 6, third door: contracts.ts reaches the browser, so it imports only zod, types and,
+  // relatively, another contracts.ts (a variant folder's builds on its module's). This block
+  // replaces the auth-type block above for contracts.ts (flat config does not merge options);
+  // `@/*` covers `@/lib/auth` as well.
   {
-    files: ["modules/*/contracts.ts"],
+    files: ["modules/**/contracts.ts"],
     rules: {
       "@typescript-eslint/no-restricted-imports": [
         "error",
@@ -358,8 +361,6 @@ const eslintConfig = defineConfig([
             {
               group: [
                 "@/*",
-                "./*",
-                "../*",
                 "server-only",
                 "next",
                 "next/*",
@@ -370,11 +371,42 @@ const eslintConfig = defineConfig([
               message:
                 "contracts.ts is browser-safe: import only zod and types.",
             },
+            {
+              regex: "^\\.{1,2}/(?!(?:\\.\\./)*(?:[^/]+/)*contracts$)",
+              allowTypeImports: true,
+              message:
+                "contracts.ts is browser-safe: import only zod, types and another contracts.ts.",
+            },
           ],
         },
       ],
     },
   },
+])
+
+// Rule 11, applied to this file: the project's config may not set a rule the conventions set.
+// For a rule with options, a later block replaces the options of an earlier one instead of adding
+// to them, so a project block for `no-restricted-imports` would silently switch the conventions'
+// patterns off for the files it matches. Project boundaries use rules the conventions leave free:
+// `import/no-restricted-paths` (one module may not reach another), `no-restricted-syntax` (only
+// one folder imports a library). A single file that departs uses an `eslint-disable` with its ADR.
+const owned = new Set(conventions.flatMap((block) => Object.keys(block.rules ?? {})))
+for (const block of project) {
+  for (const rule of Object.keys(block.rules ?? {})) {
+    if (owned.has(rule)) {
+      throw new Error(
+        `eslint.project.mjs sets ${rule}, which the conventions' config sets: it would replace the conventions' options for the same files. Use another rule (import/no-restricted-paths, no-restricted-syntax) or an eslint-disable that links an ADR.`
+      )
+    }
+  }
+}
+
+const eslintConfig = defineConfig([
+  ...nextVitals,
+  ...nextTs,
+  globalIgnores([".next/**", "out/**", "build/**", "next-env.d.ts"]),
+  ...conventions,
+  ...project,
 ])
 
 export default eslintConfig

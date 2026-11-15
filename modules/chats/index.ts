@@ -24,4 +24,10 @@ export type {
   ChatMessage,
   SendMessageInput,
 } from "./contracts"
-export { ChatNotFound, ToolOutputRejected } from "./errors"
+export {
+  ChatNotFound,
+  ToolOutputRejected,
+  chatErrors,
+  isChatError,
+} from "./errors"
+export type { ChatError } from "./errors"
