@@ -1,8 +1,31 @@
 import { defineConfig, globalIgnores } from "eslint/config"
 import nextVitals from "eslint-config-next/core-web-vitals"
 import nextTs from "eslint-config-next/typescript"
-// The project's own boundaries. The project owns that file; a rollout never overwrites it.
-import project from "./eslint.project.mjs"
+// The project's own boundaries (E1) and lint seams (E2). The project owns that file; a rollout
+// never overwrites it. A namespace import, so a project file without `seams` still loads.
+import * as projectFile from "./eslint.project.mjs"
+
+const project = projectFile.default ?? []
+// E2: options that widen one of the conventions' rules for named paths, instead of an
+// eslint-disable per file. Unknown keys are refused, so a typo doesn't silently do nothing.
+const seams = { moduleLibImports: [], ...projectFile.seams }
+for (const key of Object.keys(seams)) {
+  if (key !== "moduleLibImports") {
+    throw new Error(`eslint.project.mjs: unknown seam \`${key}\`. Known: moduleLibImports.`)
+  }
+}
+// Rule 12's pattern: everything under @/lib/ except the db and the seam's paths.
+const escapeRegex = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+const moduleLibRegex = `^@/lib/(?!(?:db(?:/.*)?${seams.moduleLibImports
+  .map((path) => `|${escapeRegex(path.slice("@/lib/".length))}`)
+  .join("")})$)`
+for (const path of seams.moduleLibImports) {
+  if (!path.startsWith("@/lib/") || path.startsWith("@/lib/auth")) {
+    throw new Error(
+      `eslint.project.mjs: moduleLibImports takes paths under @/lib/ other than lib/auth (Rule 1), got \`${path}\`.`
+    )
+  }
+}
 
 // Local rule: file must start with `import 'server-only'`.
 // Used for files that touch the db or auth so they can never end up in a client bundle.
@@ -307,7 +330,8 @@ const conventions = defineConfig([
   },
 
   // Rule 12: a module imports from lib/ only the db, and types. Auth is bound in index.ts
-  // (Rule 1); clients for external services are built by the adapter and passed in.
+  // (Rule 1); clients for external services are built by the adapter and passed in. The project
+  // widens it for named paths with the `moduleLibImports` seam (E2).
   {
     files: ["modules/**"],
     ignores: ["modules/*/index.ts"],
@@ -317,7 +341,9 @@ const conventions = defineConfig([
         {
           patterns: [
             {
-              group: ["@/lib/*", "@/lib/*/*", "!@/lib/db", "!@/lib/db/*"],
+              // A regex, not a `group`: group follows .gitignore, where a path under an excluded
+              // folder (`@/lib/fmp/errors` under `@/lib/fmp`) can't be let back in.
+              regex: moduleLibRegex,
               allowTypeImports: true,
               message:
                 "A module imports from lib/ only the db (Rule 12). Take `requester` instead of lib/auth, take the client as a parameter, use `import type` for types.",

@@ -1,4 +1,4 @@
-<!-- conventions 0.7.0 -->
+<!-- conventions 0.9.0 -->
 
 # Naming
 
@@ -14,10 +14,10 @@ or rename a file or an export.
 | Command              | `modules/<x>/commands.ts`                                                | the use case's name, same binding                                                                                                        | `deleteChat(requester, id)` → `chats.deleteChat(id)`      |
 | Domain rule          | `modules/<x>/domain.ts`, `policy.ts`                                     | a business verb or predicate, pure                                                                                                       | `applyCredits(chat, amount)`, `canShare(requester, chat)` |
 | Input contract (zod) | `contracts.ts`                                                           | `<useCase>Input`; inferred type `<UseCase>Input`                                                                                         | `sendMessageInput`, `SendMessageInput`                    |
-| Error class          | `errors.ts`                                                              | the fact that blocks the action; `override readonly name` is the class name                                                              | `ChatNotFound`, `TitleTaken`                              |
-| Error list           | `errors.ts`                                                              | `<noun>Errors`, union `<Noun>Error`, guard `is<Noun>Error`                                                                               | `chatErrors`, `ChatError`, `isChatError`                  |
-| Refusal              | `refusals.ts` next to `actions.ts` or `route.ts`                         | `<noun>Refusal(error)`, one per module it maps                                                                                           | `chatRefusal(error)`                                      |
-| Agent tool           | `modules/<x>/tools.ts`                                                   | `<noun>Tools`; the tool's own name is `snake_case` and never renamed once conversations store it                                         | `recordTools`, `search_records`                           |
+| Error class          | `errors.ts`                                                              | the fact that blocks the action                                                                                                          | `ChatNotFound`, `TitleTaken`                              |
+| Error list           | `errors.ts`                                                              | with E8: `<noun>Errors`, union `<Noun>Error`, guard `is<Noun>Error`                                                                      | `chatErrors`, `ChatError`, `isChatError`                  |
+| Refusal              | with E8: `refusals.ts` next to `actions.ts` or `route.ts`                | `<noun>Refusal(error)`, one per module it maps                                                                                           | `chatRefusal(error)`                                      |
+| Agent tool           | `modules/<x>/tools.ts`                                                   | `<noun>Tools`; the tool's own name is `snake_case` unless the project chose another style (E5)                                           | `recordTools`, `search_records`                           |
 | Component            | `components/<noun>-<role>.tsx`, or `app/.../_components/` if route-local | `<Noun><Role>`, props `<Component>Props`; client components start with `'use client'`, no suffix                                         | `ChatList`, `ChatListProps`                               |
 | Hook                 | `hooks/use-<thing>.ts`, or `_components/` if route-local                 | `use<Thing>`                                                                                                                             | `useIsMobile`                                             |
 | Page                 | `page.tsx`                                                               | `<Noun>Page` / `<Nouns>Page`                                                                                                             | `ChatPage`, `ChatsPage`                                   |
@@ -37,9 +37,9 @@ name from the [shadcn components list](https://ui.shadcn.com/docs/components.md)
 
 A component that renders one kind of content is named for the content alone (`Markdown`,
 `CodeBlock`, `MermaidDiagram`). The noun may be `App` for shell pieces (`AppSidebar`); a role may
-stack to describe a state (`ChatListSkeleton`). A role the list lacks is decided in an ADR and
-challenged (CONVENTIONS.md, Changing this document), not invented silently. Unexported helpers are
-free-form as long as they don't mimic `*Action`, `*Page` or a verb-first use-case name.
+stack to describe a state (`ChatListSkeleton`). A role the list lacks is added in
+`docs/EXTENSIONS.md` (CONVENTIONS.md, E4), not invented silently. Unexported helpers are free-form
+as long as they don't mimic `*Action`, `*Page` or a verb-first use-case name.
 `components/ui/*` is shadcn: don't rename it, don't add your own components there.
 
 A component lives as close to its use as it can, in one of two places:

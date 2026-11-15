@@ -1,6 +1,7 @@
-// Copy to test/errors.test.ts. CONVENTIONS.md, Errors: every module's errors.ts lists all of its
-// error classes, each with a literal `name`, so an adapter's exhaustive `switch` sees each one. A
-// class left out of the list would pass the compiler and reach the user as a bug.
+// Copy to test/errors.test.ts when the app uses the exhaustive error mapping (CONVENTIONS.md, E8):
+// every module's errors.ts lists all of its error classes, each with a literal `name`, so an
+// adapter's exhaustive `switch` sees each one. A class left out of the list would pass the compiler
+// and reach the user as a bug.
 import { existsSync, readdirSync } from "node:fs"
 import path from "node:path"
 import { describe, expect, it } from "vitest"
