@@ -1,25 +1,29 @@
-<!-- conventions 0.7.0 -->
+<!-- conventions 0.9.0 -->
 
 # Conventions
 
 How a Next.js app on Drizzle, Postgres and zod is organized, and when a route grows into a
 module. Rules that lint enforces are only pointed at here; the project's `eslint.config.mjs` is the
 source of truth for the import graph, and `eslint.project.mjs` holds what the project adds to it.
+What the project decides at the points this document leaves open is in `docs/EXTENSIONS.md`; read
+it with this file.
 
 ## How to read this
 
 The sections bind differently. Only the floor can be violated.
 
-| Section              | What it is                                             | Departing from it                                           |
-| -------------------- | ------------------------------------------------------ | ----------------------------------------------------------- |
-| Why                  | The priorities every rule comes from                   | Decides whatever the rules don't cover                      |
-| The floor            | What holds in every diff                               | Never. A wrong floor rule is challenged, not edited here    |
-| Defaults             | How things are done unless there is a reason not to    | A decision, not a violation, once an ADR records it         |
-| Deliberately dropped | Trade-offs already settled, each with what reopens it  | Reopen when the named condition is met                      |
-| Open territory       | Everything this document doesn't name                  | Free; decide by Why                                         |
+| Section              | What it is                                            | Departing from it                                            |
+| -------------------- | ----------------------------------------------------- | ------------------------------------------------------------ |
+| Why                  | The priorities every rule comes from                  | Decides whatever the rules don't cover                       |
+| The floor            | What holds in every diff                              | Never. A wrong floor rule is challenged, not edited here     |
+| Defaults             | How things are done unless there is a reason not to   | A decision, not a violation, once an ADR records it          |
+| Extension points     | Seams the baseline leaves to the project, E1–E8       | Not a departure: decide it, write it in `docs/EXTENSIONS.md` |
+| Deliberately dropped | Trade-offs already settled, each with what reopens it | Reopen when the named condition is met                       |
+| Open territory       | Everything this document doesn't name                 | Free; decide by Why                                          |
 
-Rule, trigger and Testing § numbers are ids, not an order: the lint config, the ADRs and the
-changelog cite them, so they keep their number wherever the rule sits.
+Rule, trigger, Testing § and extension point (E) numbers are ids, not an order: the lint config,
+the ADRs, `EXTENSIONS.md` and the changelog cite them, so they keep their number wherever the rule
+sits.
 
 Paths (`app/`, `lib/`, `eslint.config.mjs`, `docs/adr/`) are relative to the app root, the
 folder that holds the Next.js app's `package.json`: the repository root in a single-app
@@ -51,6 +55,14 @@ Three habits run through the rules below, and apply where no rule does:
   each known in exactly one file.
 - **Tools hold what tools can check.** If lint or a test can enforce it, it lives there and this
   document only points at it.
+- **Deep modules.** A module's interface (`index.ts`, `queries.ts`, `commands.ts`) is small next to
+  what it hides: a caller learns a few functions, not the tables, the provider or the order of the
+  steps. A new file, wrapper or export has to make the caller's side simpler; one that only moves
+  lines makes the module shallower.
+- **Developer experience is the leading indicator.** When following a rule makes a change longer,
+  harder to read or slower to make than the problem it guards against, the rule is wrong for that
+  case: fill an extension point if one fits, write an ADR if a default is in the way. Pragmatism
+  over perfection: a rule guards against a problem two apps have had, not one that might come.
 
 ## The floor
 
@@ -96,11 +108,9 @@ app/
 │  │  ├─ queries.ts       # reads: requireUser() → db → DTO
 │  │  └─ actions.ts       # 'use server' writes: requireUser() → parse → db → revalidate/redirect
 │  ├─ actions.ts          # module-backed route only: 'use server' adapter, parse → module → map errors → revalidate/redirect
-│  ├─ refusals.ts         # module-backed route only: the copy each module error answers with; plain functions
 │  └─ _components/        # render; a server component may await a query, never the db
 ├─ api/
 │  ├─ <x>/route.ts        # route handler for the signed-in user: adapter, parse → module → respond/stream
-│  ├─ <x>/refusals.ts     # the status and { error } each module error answers with
 │  └─ system/<x>/route.ts # webhook or cron: verifies a secret, not a session; names the requester it acts for
 modules/<x>/              # one concept each (e.g. chats); created on a promotion trigger
 ├─ index.ts               # session-bound API for app/: binds the current user (withUser), re-exports errors
@@ -111,14 +121,14 @@ modules/<x>/              # one concept each (e.g. chats); created on a promotio
 ├─ policy.ts              # authorization beyond "the owner can"; pure functions (on trigger)
 ├─ repo.ts                # db queries shared by reads and writes (the ownership check) (on need)
 ├─ mappers.ts             # row ⇄ DTO (on need)
-├─ errors.ts              # domain error classes and their list (on need)
+├─ errors.ts              # domain error classes (on need)
 ├─ tools.ts               # the tools the module offers an agent (on need)
 └─ <variants>/<id>/       # one implementation of an interface the module owns, e.g. providers/github/ (on need)
 components/               # UI more than one route group renders; components/ui/* is shadcn, untouched
 lib/
 ├─ auth.ts                # getUser / requireUser (cache()), withUser
 ├─ env.ts                 # validated env; the only reader of process.env
-├─ <service>.ts           # client for an external service (AI, mail): built from env, handed to modules by adapters
+├─ <service>.ts           # client for an external service (AI, mail): built from env, handed to modules by adapters (E3)
 └─ db/                    # client, schema (code-first), generated migrations; errors.ts names the driver codes
 scripts/                  # seed and maintenance: system callers (optional)
 ```
@@ -139,8 +149,8 @@ reached only through the registry. What the browser reads of one implementation 
 ### Dependencies
 
 Lint enforces all of these, so a departure shows up as an `eslint-disable` with its ADR link. A
-boundary the project adds (one module never imports another, only one folder imports a library)
-goes into `eslint.project.mjs` with a rule the conventions leave free, such as
+boundary the project adds (one module never imports another, only one folder imports a library,
+E1) goes into `eslint.project.mjs` with a rule the conventions leave free, such as
 `import/no-restricted-paths` or `no-restricted-syntax`. `eslint.config.mjs` refuses to load a
 project block that sets one of its own rules: a later block replaces that rule's options instead of
 adding to them, and would switch the conventions' check off for the same files.
@@ -157,8 +167,8 @@ adding to them, and would switch the conventions' check off for the same files.
   is extracted. _Lint, cycles by review._
 - **Rule 6. Four doors into a module, and no others.**
   - `app/` imports `index.ts` as a namespace (`import * as chats from "@/modules/chats"`): the
-    session-bound API. `index.ts` also re-exports the module's error classes, their list and its
-    guard, so an adapter can map them (`chats.isChatError`, `chats.ChatNotFound`).
+    session-bound API. `index.ts` also re-exports the module's error classes, so an adapter can
+    map them (`chats.ChatNotFound`).
   - Other modules, system callers (`scripts/`, `app/api/system/`) and tests import `queries.ts`,
     `commands.ts` and `errors.ts` directly and pass the requester they act for, and may import
     `contracts.ts` for its schemas and types. Never `index.ts`, which would bind the session, and
@@ -181,9 +191,11 @@ adding to them, and would switch the conventions' check off for the same files.
   tool configs at the root (`drizzle.config.ts`, `vitest.config.ts`), which their tools load
   outside Next, where `lib/env.ts` can't be imported. _Lint._
 - **Rule 12. A module imports from `lib/` only the db, and types.** An external service (AI
-  provider, mail, payments) is a client in `lib/<service>.ts`, built from `env`. The adapter
-  constructs it and passes it in, so a module never configures a provider and its tests need no
-  provider settings. `index.ts` is the one exception, for `lib/auth` (Rule 1). _Lint._
+  provider, mail, payments) is a client in `lib/<service>.ts` (a folder once it needs one), built
+  from `env`. The adapter constructs it and passes it in, so a module never configures a provider
+  and its tests need no provider settings. `index.ts` is the one exception, for `lib/auth`
+  (Rule 1). A project widens this for named paths with the `moduleLibImports` seam (E2), e.g. a
+  client's error classes a module catches. _Lint._
 
 ### The two states of a route
 
@@ -201,7 +213,7 @@ parses its own ids (`contracts.ts`); queries return `null`, commands throw a dom
 rules get their own file as soon as one is needed twice or deserves a unit test: `domain.ts` for
 calculations and state transitions, `policy.ts` for authorization beyond "the owner can". The
 route keeps a thin `actions.ts` next to `page.tsx` as the `'use server'` boundary: parse → module →
-map domain errors (`refusals.ts`) → `revalidatePath` / `redirect`. Pages and server components
+map domain errors (`instanceof`) → `revalidatePath` / `redirect`. Pages and server components
 call the module directly; `_lib/` is deleted.
 
 **Data in components.** A server component in `_components/` may await a query it owns (e.g. the
@@ -231,18 +243,17 @@ the UI sees an error class.
   `notFound()` or `forbidden()`. A bug still throws; the caller catches the rejected call, shows a
   generic line and undoes its optimistic change. `notFound()` and `error.tsx` would replace the
   page and throw away the state the browser holds.
-- **Every error is mapped, and the compiler checks it.** Each class in `errors.ts` has a literal
-  name (`override readonly name = "ChatNotFound"`), and the file exports the list of its classes,
-  their union and a guard (`chatErrors`, `ChatError`, `isChatError`). An adapter maps a module's
-  errors with a `switch` on `error.name` that ends in a `never` check, so a new class fails to
-  compile until every adapter has said what it means; what is not the module's is rethrown as a
-  bug. The list is per module, not per use case: an adapter also names the errors none of its
-  calls throws, and answers them as a bug. _tsc, plus Testing §7._
-- **The mapping is a plain file next to the adapter.** `refusals.ts` beside `actions.ts` or
-  `route.ts` holds a `<noun>Refusal(error)` per module: the copy, or the status and `{ error }`,
-  for each of its errors. It imports no `next/*`, so a test checks every case without Next, and it
-  is not in `actions.ts`, whose every export the browser can call; `actions.ts` exports only
-  actions. The adapter stays parse → module → refusal → revalidate/redirect. _Review._
+- **The adapter maps inline.** `actions.ts` or `route.ts` catches around the module call, maps
+  each error it answers with `instanceof` (`if (error instanceof chats.ChatNotFound) notFound()`)
+  and rethrows the rest as a bug. The adapter stays parse → module → map → revalidate/redirect,
+  and its mapping reads top to bottom in one function. The price is that a forgotten mapping is a
+  `500`, not a compile error (Deliberately dropped). An app that has paid that price switches to
+  the exhaustive mapping, E8. _Review._
+- **An error from outside the modules is a bug until the project says otherwise.** A service
+  client's failure, a library's exception: the adapter rethrows it like any error it doesn't map.
+  How a client fails, retries and times out, which of its failures an adapter answers, and which
+  use cases carry on without it are extension point E3. A module never turns such a failure into
+  a domain error. _Review._
 - A route handler answers JSON `{ error }` on every status, `404` and `500` included: `notFound()`
   would render the HTML page.
 - When a module must produce user-facing text itself, as in an error chunk after a stream has
@@ -289,7 +300,7 @@ triggers: "it might be reused later", many small actions in one file, a cleaner 
 | Level      | Self-contained route                       | Module-backed route                                             |
 | ---------- | ------------------------------------------ | --------------------------------------------------------------- |
 | API tests  | none (would need Next; see soft trigger 6) | every use case in `queries.ts` and `commands.ts`, real Postgres |
-| Unit tests | business-critical pure functions only      | `domain.ts`, `policy.ts` and `refusals.ts`, by example tables   |
+| Unit tests | business-critical pure functions only      | `domain.ts` and `policy.ts`, by example tables                  |
 | UI tests   | business-critical workflows only, E2E      | same; the only coverage the rest of an adapter gets             |
 
 > **TODO:** confirm the definition of "business critical". Draft: it moves money, changes who may
@@ -311,11 +322,7 @@ triggers: "it might be reused later", many small actions in one file, a cleaner 
    `null` or throws, and changes nothing) and a malformed-id case next to its happy path. This one
    is part of the floor.
 6. **Never mock `next/*`.** A test that needs Next means the logic sits in the adapter and belongs
-   in the module, or, for copy and statuses, in the adapter's `refusals.ts`.
-7. **Every error is in its list, and every refusal is tested.** `test/errors.test.ts` (from the
-   conventions' `templates/errors.test.ts`) checks that each `errors.ts` lists every class it
-   exports, each named after itself. `refusals.test.ts` next to a `refusals.ts` has a case per
-   error class: the copy or status it answers, and that anything else is rethrown.
+   in the module.
 
 ```bash
 createdb <app>_test   # once, on the local Postgres
@@ -329,6 +336,52 @@ A module is named after a business noun, never a technical one: not `utils`, `co
 An exported name says what kind of thing it is (`deleteChatAction`, `getChat`, `ChatList`,
 `chatsTable`). The patterns per kind, and the list of component roles, are in
 [NAMING.md](./NAMING.md); read it when you create or rename a file or an export.
+
+## Extension points
+
+The baseline stops where apps start to differ. At these seams the project decides, writes the
+decision once in `docs/EXTENSIONS.md` (from the conventions' `templates/EXTENSIONS.md`) and
+follows it from then on. Filling a seam departs from nothing: it needs no ADR and no challenge,
+and a rollout never overwrites it. Leave a point out of the file until the app needs it.
+
+An entry says what was decided, where it lives in the code and, in a line, why. An extension
+fills a seam; it never loosens the floor or contradicts a default. If it has to, it is an ADR.
+
+- **E1. Boundaries of the project's own.** One module never imports another, only one folder
+  imports a library: a block in `eslint.project.mjs` with a rule the conventions leave free
+  (Dependencies). The entry names the boundary; the block enforces it. _Lint._
+- **E2. Lint seams.** `eslint.project.mjs` exports `seams`, options the conventions' config reads
+  to widen one of its rules for named paths instead of an `eslint-disable` per file. Today:
+  `moduleLibImports`, paths under `@/lib/` a module may import as values (Rule 12). A widening
+  the config has no seam for is an ADR and its `eslint-disable`. _Lint._
+- **E3. External services.** For each client in `lib/`: the failures it reports and how (its
+  error classes, if any), its timeout and retries, how adapters answer each failure (copy, status,
+  what is logged), and which use cases carry on without it (a read that leaves a value out, work
+  completed later). The baseline only says that what nobody maps is a bug, and that a module never
+  turns a client's failure into a domain error. An adapter maps it like a module's error.
+  A module that carries on without the client catches only the client's failures and rethrows the
+  rest, which is what `moduleLibImports` (E2) is for. _Review._
+- **E4. Naming additions.** A component role, or a kind of file, the tables in NAMING.md lack: name
+  it, say what it is, give an example. _Review._
+- **E5. Agent tool names.** The case style of the tools' own names. The baseline only requires
+  names every provider accepts: a letter, then letters, digits or `_`, at most 64. Without an
+  entry, tools are `snake_case`. Saved conversations store the name, so renaming a tool is a
+  migration of stored messages, whatever the style. _Review._
+- **E6. Observability.** Where an error that the Errors table says is "logged" goes (console, an
+  error tracker) and what an expected refusal reports, if anything. _Review._
+- **E7. Test support.** `test/global-setup.ts`, `test/factories.ts`, fixtures and recordings of
+  external services: what exists and how a test uses it. _Review._
+- **E8. Exhaustive error mapping.** For an app where a forgotten `instanceof` reached users, or
+  whose adapters' copy and statuses need tests. Each class in `errors.ts` has a literal `name`
+  (`override readonly name = "ChatNotFound"`), and the file exports the list, the union and a guard
+  (`chatErrors`, `ChatError`, `isChatError`), re-exported by `index.ts`. The mapping moves to
+  `refusals.ts` next to `actions.ts` or `route.ts`: a `<noun>Refusal(error)` per module, a `switch`
+  on `error.name` that ends in a `never` check, so a new class doesn't compile until every adapter
+  answers it. It imports no `next/*`, so where the action must call `notFound()` or `forbidden()`
+  the refusal says so in its answer (`{ error, notFound: true }`). `refusals.test.ts` has a case
+  per class, and `test/errors.test.ts` (from `templates/errors.test.ts`) checks every list is
+  complete. The entry says which modules and adapters use it; the rest map inline. _tsc, plus
+  test._
 
 ## Deliberately dropped
 
@@ -347,12 +400,17 @@ condition is met, proposing the dropped thing again is not an improvement.
   `index.ts`, so a missing one shows the day an adapter needs it.
 - **Full module layering from day one.** `domain/`, `application/`, `infra/` folders and ports
   are correct and too heavy for a route that owns one table. Flat files, promoted on trigger.
-- **`Result` types and tagged error unions for our own refusals.** Thrown classes mapped in the
-  adapter are the TypeScript default and cost no runtime package. The price `Result` would avoid,
-  exhaustiveness, is paid instead by each `errors.ts` listing its classes and the adapter's
-  `never` check (Errors). Revisit if an adapter has to know which errors one use case throws, not
-  just its module. An answer a remote system gives (a refusal the user or a model is shown) is
-  data the code returns, not an error, and is open territory.
+- **`Result` types and tagged error unions.** Thrown classes mapped in the adapter are the
+  TypeScript default and cost no runtime package. The price is exhaustiveness: a forgotten
+  `instanceof` is a `500`, not a compile error. Testing §1 proves the command throws; that the
+  adapter maps it is seen only by an E2E test. Accepted while an adapter stays as thin as parse →
+  module → map; E8 pays for exhaustiveness without a `Result`. An answer a remote system gives (a
+  refusal the user or a model is shown) is data the code returns, not an error, and is open
+  territory.
+- **Exhaustive error mapping as a default** (0.7.0, Testing §7; the id is retired). Every module
+  paid for a list, a guard, a `refusals.ts` and two tests, and every new error class touched four
+  files, against a mistake one app had made. The inline `instanceof` read better and held. It is
+  E8 for the app that has made that mistake.
 - **A separate browser-safe `index.ts` and server-only `server.ts`.** One server-only `index.ts`
   plus a browser-safe `contracts.ts` gives the same guarantee with one file fewer.
 - **Cache tags, cross-module events, branded ids.** Not until `cacheComponents` is on, a second
@@ -365,6 +423,13 @@ condition is met, proposing the dropped thing again is not an improvement.
   component sits in the nearest `_components/`, or in `components/` once two route groups render
   it. A folder that no longer scans flat is grouped by the noun its components render
   (NAMING.md), which keeps that placement.
+- **One prescribed design for external service clients** (0.8.0: four failure classes, the
+  client's retry policy, fixed statuses). It came from one client in one app and needed an
+  exception in the first one it met: reads that carry on without the service. How a client fails
+  is E3. Reopen when two apps have written the same E3 entry.
+- **A test of tool names** (0.8.0, Testing §8). A provider refuses a bad name on the first request,
+  so nothing is left for a test to catch, and the `snake_case`-only pattern it checked was a style
+  no provider requires. The style is E5.
 
 ## Examples
 
@@ -400,7 +465,7 @@ once, and the page never mentions a user.
 // modules/chats/index.ts
 export const getChat = withUser(queries.getChat)
 export const deleteChat = withUser(commands.deleteChat)
-export { ChatNotFound, TitleTaken, isChatError } from "./errors"
+export { ChatNotFound, TitleTaken } from "./errors"
 
 // app/(chat)/[id]/page.tsx
 import * as chats from "@/modules/chats"
@@ -409,57 +474,48 @@ const chat = await chats.getChat(id)
 if (!chat) notFound()
 ```
 
-A module's errors and the adapter that maps them: a literal name per class, one list, and a
-`switch` the compiler checks, so a new class doesn't build until the adapter has its copy.
+A module's error and the action that maps it inline: the copy and the not-found page sit next
+to the call that can fail, and everything else is rethrown as a bug.
 
 ```ts
 // modules/chats/errors.ts
 import "server-only"
 
 export class ChatNotFound extends Error {
-  override readonly name = "ChatNotFound"
   constructor(readonly chatId: string) {
     super(`Chat ${chatId} not found`)
   }
 }
 export class TitleTaken extends Error {
-  override readonly name = "TitleTaken"
   constructor(readonly title: string) {
     super(`Title ${title} is taken`)
   }
 }
 
-export const chatErrors = [ChatNotFound, TitleTaken] as const
-export type ChatError = InstanceType<(typeof chatErrors)[number]>
-export function isChatError(error: unknown): error is ChatError {
-  return chatErrors.some((type) => error instanceof type)
-}
-
-// app/(chat)/refusals.ts
-import "server-only"
-import * as chats from "@/modules/chats"
-
-export function chatRefusal(error: unknown): { error: string } {
-  if (!chats.isChatError(error)) throw error
-  switch (error.name) {
-    case "ChatNotFound":
-      return { error: "This chat no longer exists." }
-    case "TitleTaken":
+// app/(chat)/actions.ts
+export async function renameChatAction(_: { error: string } | null, formData: FormData) {
+  const input = renameChatInput.safeParse(Object.fromEntries(formData))
+  if (!input.success) return { error: "Give the chat a title." }
+  try {
+    await chats.renameChat(input.data)
+  } catch (error) {
+    if (error instanceof chats.ChatNotFound) notFound()
+    if (error instanceof chats.TitleTaken) {
       return { error: `You already have a chat called ${error.title}.` }
-    default:
-      return unmapped(error)
+    }
+    throw error
   }
-}
-
-function unmapped(error: never): never {
-  throw error
+  revalidatePath(`/chats/${input.data.chatId}`)
+  return null
 }
 ```
 
 ## Open territory
 
 What this document doesn't name is yours to decide: how a component is built inside, styling,
-local state, the shape of an unexported helper. Decide by Why, in order.
+local state, the shape of an unexported helper. Decide by Why, in order. Open territory is decided
+in the code and needs no entry; an extension point is decided once and written down, because every
+later change at that seam has to follow it.
 
 Going further than a default in its own direction is not a deviation and needs no ADR: a tighter
 type, a smaller function, a clearer name, a second test case for an id.
@@ -470,35 +526,36 @@ later") is not an improvement here; see Promotion and Deliberately dropped.
 ## Changing this document
 
 This file is a copy. It is changed only in the home repository of the conventions,
-`laserjm/conventions`, released there and rolled out to every project that uses it. Changes go
-top down: the project never edits this file, and doesn't open issues or pull requests against the
-home repository either. A rule is challenged through the human in the loop, and they decide
-whether the home repository changes.
+`laserjm/conventions`, released there and rolled out to every project that uses it. The project
+never edits it and doesn't open issues or pull requests against the home repository. The baseline
+changes rarely, and on purpose: a project that grows grows into its extension points, not into
+this file.
 
-- **A better way that fits the defaults:** do it. If every project would gain from it, challenge
-  the rule too.
-- **A better way that conflicts with a default:** follow the default and challenge it. If the
-  task can't be done well without departing, write the ADR first (Rule 11), then depart.
-- **A problem with a floor rule, or an unproven part that doesn't fit:** stop and challenge it.
-  Don't edit this file and don't work around the rule in source.
-- **A default that keeps collecting ADRs:** challenge it.
-- **An improvement every project would gain from** (a rule that would have prevented the bug you
-  just fixed, a default that could be tighter, a check lint or a test could take over):
-  challenge it, even when the task is done without it.
+- **A need an extension point covers:** decide it and write it in `docs/EXTENSIONS.md`.
+- **A better way that conflicts with a default:** write the ADR first (Rule 11), then depart.
+- **A need no extension point covers, where a default is in the way:** write the ADR, and name the
+  missing seam in a `Conventions challenge`.
+- **A floor rule, or an unproven part, that doesn't fit:** stop and challenge it. Don't edit this
+  file and don't work around the rule in source.
+- **An improvement that worked here:** keep it as an extension. It is not challenged. It moves into
+  the baseline when a second app has written the same extension, and the owner moves it.
 
 **How to challenge.** Where the work is reported (the pull request description or the final
-message), add a section `Conventions challenge` per rule. Name the rule by its id, what happened
-here (link the commit, issue or ADR), the change you propose, and how it would be enforced: lint,
-review or test. A rule earns its place by a problem that happened, not by one that might; a
-removed rule gets a bullet in Deliberately dropped, so the question is not reopened.
+message), add a section `Conventions challenge` per rule or seam. Name it by its id, what happened
+here (link the commit, issue or ADR), and the change you propose. Before a rule is added, it has to
+make the usual change shorter or safer for its reader in two apps; a rule that adds a file or a
+step to every feature names the bug it prevented. A removed rule gets a bullet in Deliberately
+dropped, so the question is not reopened.
 
 ## Sources of truth
 
 - `NAMING.md`: file and identifier patterns per kind, component roles.
+- `docs/EXTENSIONS.md`: what the project decided at each extension point it uses.
 - `eslint.config.mjs`: the import graph, `server-only`, `'use server'`, casts, `process.env`, what
-  a module may import from `lib/`. `eslint.project.mjs`: the boundaries the project adds.
+  a module may import from `lib/`. `eslint.project.mjs`: the boundaries the project adds (E1) and
+  its lint seams (E2).
 - `docs/adr/`: every decision that interprets or
   deviates from a rule, with the options considered and how to reverse it.
-- `test/global-setup.ts`, `test/factories.ts`: test database and fixtures. `test/errors.test.ts`:
-  every module error is in its list.
+- `test/global-setup.ts`, `test/factories.ts`: test database and fixtures. With E8,
+  `test/errors.test.ts`: every module error is in its list.
 - `lib/db/errors.ts`: the one place that knows the driver's error codes.

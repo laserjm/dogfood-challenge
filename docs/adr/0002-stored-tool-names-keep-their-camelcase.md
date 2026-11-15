@@ -1,6 +1,7 @@
 # ADR 0002: Stored tool names keep their camelCase
 
-- **Status:** Proposed
+- **Status:** Superseded by `docs/EXTENSIONS.md`, E5 (conventions 0.9.0). The tool names'
+  case style is an extension point now, so it departs from nothing.
 - **Date:** 2026-11-15
 - **Deciders:** Michael Laser
 - **Context stage:** Rollout of conventions 0.7.0
