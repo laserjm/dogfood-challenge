@@ -170,9 +170,9 @@ Eight stages, each ending in a working, committable state. AI enters the app onl
 **Build:** Loading, empty and error states; an auto-generated chat title from the first message; integration tests for the data layer against a test database.
 
 - [ ] Empty state for no chats and for an empty chat
-- [ ] Sending to a deleted chat returns a clean 404 from the API
+- [x] Sending to a deleted chat returns a clean 404 from the API
 - [ ] Tests cover ordering, cascade delete and role mapping, and pass
-- [ ] No `any` and no unhandled promise in the data and API layers
+- [x] No `any` and no unhandled promise in the data and API layers
 
 ### Stage 7 — Final audit
 
