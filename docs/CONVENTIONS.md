@@ -1,4 +1,4 @@
-<!-- conventions 0.9.0 -->
+<!-- conventions 0.10.0 -->
 
 # Conventions
 
@@ -31,8 +31,8 @@ repository, `apps/<app>/` in a monorepo. This file and NAMING.md sit in `docs/` 
 
 **Unproven.** Some parts are carried over from earlier projects, and no app has exercised them
 yet: `app/api/system/`, the shared transaction of hard trigger 3, `scripts/` calling a use case
-instead of writing rows, `policy.ts` and the `Forbidden` row, `domain.ts`, a module's variant
-folders, and UI tests.
+instead of writing rows, `policy.ts` and the `Forbidden` row, a module's variant folders, and UI
+tests.
 If one of them doesn't fit the first project that needs it, that is a finding about the rule, not
 a deviation: challenge it (Changing this document).
 
@@ -118,6 +118,7 @@ modules/<x>/              # one concept each (e.g. chats); created on a promotio
 ├─ queries.ts             # reads (requester, …) → DTO | null
 ├─ commands.ts            # writes (requester, input); throw domain errors
 ├─ domain.ts              # pure business rules over DTOs: calculations, state transitions (on trigger)
+├─ domain/<group>.ts      # in place of domain.ts once it holds a second group of rules (on trigger)
 ├─ policy.ts              # authorization beyond "the owner can"; pure functions (on trigger)
 ├─ repo.ts                # db queries shared by reads and writes (the ownership check) (on need)
 ├─ mappers.ts             # row ⇄ DTO (on need)
@@ -140,6 +141,12 @@ A module has `contracts.ts` and the doors its callers use: `index.ts` once `app/
 `queries.ts` once it reads, `commands.ts` once it writes. Every other file appears when its content
 does; an empty file or an export nobody calls is structure ahead of its trigger.
 
+A module's pure rules are one `domain.ts` until it holds a second independent group of them: rules
+that are read and tested apart, each with its own example table. Then the groups move to
+`domain/<group>.ts`, one file per group, named for what it holds (`domain/retry.ts`), each with its
+`<group>.test.ts` beside it. The folder has no `index`; its files import each other one way only,
+and the module's other files import the group they use.
+
 A module that holds several implementations of one interface it owns (a provider per external
 system) gives each its own folder, `<variants>/<id>/`. The interface is `<variant>.ts`, the
 registry that lists the implementations `<variants>.ts`; outside its folder an implementation is
@@ -156,7 +163,9 @@ project block that sets one of its own rules: a later block replaces that rule's
 adding to them, and would switch the conventions' check off for the same files.
 
 - **Rule 3. Only `_lib/*`, `modules/*` and `lib/` import the db.** Outside the app, `test/`
-  (setup, factories) and seed scripts do too. _Lint._
+  (setup, factories) and seed scripts do too. In a module, the pure rules don't: `domain.ts`,
+  `domain/` and their tests never import the db, types included. A rule that needs a row takes it
+  from the query or command that calls it. _Lint._
 - **Rule 4. Server-side code starts with `import 'server-only'`;** in `actions.ts`, `'use server'`
   comes first. Exempt: `contracts.ts` (browser-safe by design), `schema.ts` (drizzle-kit loads it
   outside Next) and tests. Tests and scripts run outside Next, where `server-only` resolves to
@@ -300,7 +309,7 @@ triggers: "it might be reused later", many small actions in one file, a cleaner 
 | Level      | Self-contained route                       | Module-backed route                                             |
 | ---------- | ------------------------------------------ | --------------------------------------------------------------- |
 | API tests  | none (would need Next; see soft trigger 6) | every use case in `queries.ts` and `commands.ts`, real Postgres |
-| Unit tests | business-critical pure functions only      | `domain.ts` and `policy.ts`, by example tables                  |
+| Unit tests | business-critical pure functions only      | `domain.ts` or `domain/`, and `policy.ts`, by example tables    |
 | UI tests   | business-critical workflows only, E2E      | same; the only coverage the rest of an adapter gets             |
 
 > **TODO:** confirm the definition of "business critical". Draft: it moves money, changes who may
@@ -399,7 +408,9 @@ condition is met, proposing the dropped thing again is not an improvement.
   doesn't. A module has the doors its callers use (Layout); lint refuses `app/` reaching past
   `index.ts`, so a missing one shows the day an adapter needs it.
 - **Full module layering from day one.** `domain/`, `application/`, `infra/` folders and ports
-  are correct and too heavy for a route that owns one table. Flat files, promoted on trigger.
+  are correct and too heavy for a route that owns one table. Flat files, promoted on trigger. A
+  `domain/` folder (Layout) is not that layering: it splits one file of pure rules that grew, and
+  changes nothing about who calls whom.
 - **`Result` types and tagged error unions.** Thrown classes mapped in the adapter are the
   TypeScript default and cost no runtime package. The price is exhaustiveness: a forgotten
   `instanceof` is a `500`, not a compile error. Testing §1 proves the command throws; that the

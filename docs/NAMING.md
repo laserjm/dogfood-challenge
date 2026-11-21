@@ -1,4 +1,4 @@
-<!-- conventions 0.9.0 -->
+<!-- conventions 0.10.0 -->
 
 # Naming
 
@@ -12,7 +12,7 @@ or rename a file or an export.
 | Server action        | `actions.ts`                                                             | `<useCase>Action`                                                                                                                        | `deleteChatAction`                                        |
 | Query                | `queries.ts`                                                             | `get<Noun>` / `get<Nouns>`, returns `null` when missing (there is no `find`); in a module `(requester, …)`, bound to `(…)` by `index.ts` | `getChat(requester, id)` → `chats.getChat(id)`            |
 | Command              | `modules/<x>/commands.ts`                                                | the use case's name, same binding                                                                                                        | `deleteChat(requester, id)` → `chats.deleteChat(id)`      |
-| Domain rule          | `modules/<x>/domain.ts`, `policy.ts`                                     | a business verb or predicate, pure                                                                                                       | `applyCredits(chat, amount)`, `canShare(requester, chat)` |
+| Domain rule          | `modules/<x>/domain.ts` or `domain/<group>.ts`, `policy.ts`              | a business verb or predicate, pure                                                                                                       | `applyCredits(chat, amount)`, `canShare(requester, chat)` |
 | Input contract (zod) | `contracts.ts`                                                           | `<useCase>Input`; inferred type `<UseCase>Input`                                                                                         | `sendMessageInput`, `SendMessageInput`                    |
 | Error class          | `errors.ts`                                                              | the fact that blocks the action                                                                                                          | `ChatNotFound`, `TitleTaken`                              |
 | Error list           | `errors.ts`                                                              | with E8: `<noun>Errors`, union `<Noun>Error`, guard `is<Noun>Error`                                                                      | `chatErrors`, `ChatError`, `isChatError`                  |

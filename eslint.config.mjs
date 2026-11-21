@@ -132,6 +132,21 @@ const noRouteLibInApi = {
     "Route handlers never import a route's `_lib`, `actions.ts` or `_components`. Shared logic lives in `@/modules/<x>`.",
 }
 
+// Rule 5 and Rule 6 for modules/, named once: the domain block below repeats them.
+const noNextInModules =
+  "modules/ never import next/*. Keep redirect/revalidate in the route's actions.ts."
+const moduleImportPaths = [{ name: "next", message: noNextInModules }]
+const moduleImportPatterns = [
+  { group: ["next/*"], message: noNextInModules },
+  { group: ["@/app", "@/app/*"], message: "modules/ never import app/." },
+  noSessionBoundModule,
+]
+const noDbInDomain = {
+  group: noDbInUi.group,
+  message:
+    "A module's pure rules never import the db (Rule 3). A rule that needs a row takes it from the query or command that calls it.",
+}
+
 const conventions = defineConfig([
   // Rule 3: only `_lib/*`, `lib/` and `modules/` may import the db; outside the app, test/ and
   // scripts/ do too (they are not matched below). `_lib` may import the db, but modules only
@@ -265,26 +280,25 @@ const conventions = defineConfig([
     rules: {
       "no-restricted-imports": [
         "error",
+        { paths: moduleImportPaths, patterns: moduleImportPatterns },
+      ],
+    },
+  },
+  // Rule 3, pure rules: a module's domain.ts, domain/ and their tests never import the db, types
+  // included. This block replaces the one above for these files (flat config does not merge
+  // options), so it repeats that block's patterns.
+  {
+    files: [
+      "modules/*/domain.ts",
+      "modules/*/domain.test.ts",
+      "modules/*/domain/**",
+    ],
+    rules: {
+      "no-restricted-imports": [
+        "error",
         {
-          paths: [
-            {
-              name: "next",
-              message:
-                "modules/ never import next/*. Keep redirect/revalidate in the route's actions.ts.",
-            },
-          ],
-          patterns: [
-            {
-              group: ["next/*"],
-              message:
-                "modules/ never import next/*. Keep redirect/revalidate in the route's actions.ts.",
-            },
-            {
-              group: ["@/app", "@/app/*"],
-              message: "modules/ never import app/.",
-            },
-            noSessionBoundModule,
-          ],
+          paths: moduleImportPaths,
+          patterns: [...moduleImportPatterns, noDbInDomain],
         },
       ],
     },
